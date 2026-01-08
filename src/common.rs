@@ -109,6 +109,13 @@ impl Drop for SimpleCallOnReturn {
 }
 
 pub fn global_init() -> bool {
+
+    // ===== 자체 서버 하드코딩 =====
+    use crate::ui_interface::set_option;
+    set_option("custom-rendezvous-server".into(), "10.185.38.13".into());
+    set_option("key".into(), "Kk52Nhpm6z0zMKNklC3XBlPslRgmjP3igPvAO5ZaUGg=".into());
+    // =============================
+
     #[cfg(target_os = "linux")]
     {
         if !crate::platform::linux::is_x11() {
