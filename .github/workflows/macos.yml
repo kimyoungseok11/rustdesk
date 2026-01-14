@@ -1,16 +1,16 @@
 name: macOS Build
 
 on:
+    workflow_dispatch:
     # push:
     #     branches: [master]
-    workflow_dispatch:
 
 jobs:
     build-macos:
-        runs-on: macos-13 # ❗ macos-14 쓰면 ABI/SDK 충돌 잦음
+        runs-on: macos-14 # ✅ 이제 이거 말고 선택지 없음
 
         env:
-            # 🔴 scrap / aom / vmaf 완전 차단
+            # 🔴 system lib 전부 차단
             NO_PKG_CONFIG: '1'
             NO_PKG_CONFIG_libyuv: '1'
             NO_PKG_CONFIG_libvpx: '1'
@@ -18,9 +18,13 @@ jobs:
             NO_PKG_CONFIG_vmaf: '1'
             NO_PKG_CONFIG_opus: '1'
 
-            SCRAP_DISABLE_VMAF: '1' # ⭐⭐⭐ 이게 핵심 ⭐⭐⭐
+            # ⭐ scrap VMAF 완전 차단 (가장 중요)
+            SCRAP_DISABLE_VMAF: '1'
 
-            MACOSX_DEPLOYMENT_TARGET: '11.0'
+            # 🔧 macOS ABI 정렬
+            MACOSX_DEPLOYMENT_TARGET: '14.0'
+            SDKROOT: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+
             RUSTFLAGS: '-C link-arg=-Wl,-dead_strip'
 
         steps:
@@ -68,7 +72,7 @@ jobs:
                     <key>CFBundlePackageType</key>
                     <string>APPL</string>
                     <key>LSMinimumSystemVersion</key>
-                    <string>11.0</string>
+                    <string>14.0</string>
                   </dict>
                   </plist>
                   EOF
