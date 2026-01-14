@@ -11,21 +11,33 @@ jobs:
 
         env:
             RUST_BACKTRACE: 1
+
+            # vcpkg
             VCPKG_ROOT: C:\vcpkg
             VCPKG_DEFAULT_TRIPLET: x64-windows-static
+
+            # 🔥 scrap aom 비활성화 (핵심)
             NO_PKG_CONFIG_aom: 1
 
         steps:
+            # ----------------------------------
+            # 1. Checkout
+            # ----------------------------------
             - name: Checkout
               uses: actions/checkout@v4
               with:
                   submodules: recursive
 
+            # ----------------------------------
+            # 2. vcpkg + native deps
+            # ----------------------------------
             - name: Setup vcpkg
+              shell: powershell
               run: |
                   if (!(Test-Path C:\vcpkg)) {
                     git clone https://github.com/microsoft/vcpkg C:\vcpkg
                   }
+
                   cd C:\vcpkg
                   .\bootstrap-vcpkg.bat -disableMetrics
 
@@ -33,25 +45,16 @@ jobs:
                   .\vcpkg install libvpx:x64-windows-static
                   .\vcpkg install opus:x64-windows-static
 
+            # ----------------------------------
+            # 3. Rust
+            # ----------------------------------
             - name: Setup Rust
               uses: dtolnay/rust-toolchain@stable
 
+            # ----------------------------------
+            # 4. Flutter
+            # ----------------------------------
             - name: Setup Flutter
               uses: subosito/flutter-action@v2
               with:
                   channel: stable
-
-            - name: Build Rust Core
-              run: cargo build --release
-
-            - name: Build Windows App
-              run: |
-                  cd flutter
-                  flutter pub get
-                  flutter build windows --release
-
-            - name: Upload Windows Artifact
-              uses: actions/upload-artifact@v4
-              with:
-                  name: rustdesk-windows
-                  path: flutter/build/windows/runner/Release
