@@ -1,82 +1,50 @@
-name: macOS Build
+name: build-windows
 
 on:
-    # push:
-    #     branches: [master]
     workflow_dispatch:
+    push:
+        branches: [master]
 
 jobs:
-    build-macos:
-        runs-on: macos-13 # 🔴 중요: macos-14 쓰면 ABI 터짐
+    windows:
+        runs-on: windows-latest
 
         env:
-            # ❗️핵심: 시스템 라이브러리 전부 차단
-            NO_PKG_CONFIG: '1'
-            NO_PKG_CONFIG_libyuv: '1'
-            NO_PKG_CONFIG_libvpx: '1'
-            NO_PKG_CONFIG_aom: '1'
-            NO_PKG_CONFIG_vmaf: '1'
-            NO_PKG_CONFIG_opus: '1'
-
-            MACOSX_DEPLOYMENT_TARGET: '11.0'
-            RUSTFLAGS: '-C link-arg=-Wl,-dead_strip'
+            VCPKG_ROOT: C:\vcpkg
+            AOM_DISABLE_VMAF: '1'
 
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+
+            - name: Setup vcpkg
+              run: |
+                  if (!(Test-Path "C:\vcpkg")) {
+                    git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+                  }
+                  C:\vcpkg\bootstrap-vcpkg.bat
+
+            - name: Install vcpkg libraries
+              run: |
+                  C:\vcpkg\vcpkg install `
+                    libyuv:x64-windows-static `
+                    libvpx:x64-windows-static `
+                    opus:x64-windows-static `
+                    aom:x64-windows-static
+
+            - name: Rust toolchain
+              uses: actions-rs/toolchain@v1
               with:
-                  submodules: recursive
+                  toolchain: stable
+                  target: x86_64-pc-windows-msvc
+                  override: true
 
-            - name: Install Rust
-              uses: dtolnay/rust-toolchain@stable
-              with:
-                  targets: aarch64-apple-darwin
-
-            - name: Rust cache
-              uses: Swatinem/rust-cache@v2
-
-            - name: Build rustdesk (core)
+            - name: Build rustdesk (Windows)
               run: |
-                  cargo build --release --bin rustdesk
-
-            - name: Create .app bundle
-              run: |
-                  APP_NAME=RustDesk.app
-                  BIN=target/release/rustdesk
-
-                  mkdir -p "$APP_NAME/Contents/MacOS"
-                  mkdir -p "$APP_NAME/Contents/Resources"
-
-                  cp "$BIN" "$APP_NAME/Contents/MacOS/RustDesk"
-
-                  cat > "$APP_NAME/Contents/Info.plist" <<EOF
-                  <?xml version="1.0" encoding="UTF-8"?>
-                  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-                  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-                  <plist version="1.0">
-                  <dict>
-                    <key>CFBundleName</key>
-                    <string>RustDesk</string>
-                    <key>CFBundleExecutable</key>
-                    <string>RustDesk</string>
-                    <key>CFBundleIdentifier</key>
-                    <string>com.example.rustdesk</string>
-                    <key>CFBundleVersion</key>
-                    <string>1.0.0</string>
-                    <key>CFBundlePackageType</key>
-                    <string>APPL</string>
-                    <key>LSMinimumSystemVersion</key>
-                    <string>11.0</string>
-                  </dict>
-                  </plist>
-                  EOF
-
-            - name: Zip app
-              run: |
-                  zip -r RustDesk-macOS.zip RustDesk.app
+                  cargo build --release
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: RustDesk-macOS
-                  path: RustDesk-macOS.zip
+                  name: rustdesk-windows
+                  path: target\release\rustdesk.exe
