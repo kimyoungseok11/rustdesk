@@ -25,13 +25,13 @@ jobs:
             - name: Install build dependencies
               run: |
                   brew update
-                  brew install cmake nasm yasm opus libyuv pkg-config
+                  brew install cmake nasm yasm opus pkg-config
 
-            - name: Configure native library paths
+            - name: Configure native dependencies
               run: |
                   echo "OPUS_DIR=$(brew --prefix opus)" >> $GITHUB_ENV
-                  echo "LIBYUV_DIR=$(brew --prefix libyuv)" >> $GITHUB_ENV
-                  echo "PKG_CONFIG_PATH=$(brew --prefix opus)/lib/pkgconfig:$(brew --prefix libyuv)/lib/pkgconfig" >> $GITHUB_ENV
+                  echo "PKG_CONFIG_PATH=$(brew --prefix opus)/lib/pkgconfig" >> $GITHUB_ENV
+                  echo "NO_PKG_CONFIG_libyuv=1" >> $GITHUB_ENV
 
             - name: Build RustDesk client
               run: |
