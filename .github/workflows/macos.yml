@@ -38,12 +38,10 @@ jobs:
                   brew update
                   brew install opus
 
-            # 🔥 핵심: libyuv 비활성화
-            - name: Disable libyuv for scrap
-              run: echo "NO_PKG_CONFIG_libyuv=1" >> $GITHUB_ENV
-
-            # 5. Rust Core
+            # build.rs가 100% 인식하도록 cargo build 단계에 env 직접 주입
             - name: Build Rust Core
+              env:
+                  NO_PKG_CONFIG_libyuv: '1'
               run: cargo build --release
 
             # 6. Flutter macOS (codesign 끔)
