@@ -13,6 +13,7 @@ jobs:
             RUST_BACKTRACE: 1
             VCPKG_ROOT: C:\vcpkg
             VCPKG_DEFAULT_TRIPLET: x64-windows-static
+            NO_PKG_CONFIG_aom: 1
 
         steps:
             - name: Checkout
@@ -20,7 +21,6 @@ jobs:
               with:
                   submodules: recursive
 
-            # ---------- vcpkg ----------
             - name: Setup vcpkg
               run: |
                   if (!(Test-Path C:\vcpkg)) {
@@ -31,31 +31,25 @@ jobs:
 
                   .\vcpkg install libyuv:x64-windows-static
                   .\vcpkg install libvpx:x64-windows-static
-                  .\vcpkg install libaom:x64-windows-static
                   .\vcpkg install opus:x64-windows-static
 
-            # ---------- Rust ----------
             - name: Setup Rust
               uses: dtolnay/rust-toolchain@stable
 
-            # ---------- Flutter ----------
             - name: Setup Flutter
               uses: subosito/flutter-action@v2
               with:
                   channel: stable
 
-            # ---------- Rust core ----------
             - name: Build Rust Core
               run: cargo build --release
 
-            # ---------- Flutter Windows ----------
             - name: Build Windows App
               run: |
                   cd flutter
                   flutter pub get
                   flutter build windows --release
 
-            # ---------- Artifact ----------
             - name: Upload Windows Artifact
               uses: actions/upload-artifact@v4
               with:
