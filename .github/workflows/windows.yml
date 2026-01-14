@@ -31,6 +31,7 @@ jobs:
 
                   .\vcpkg install libyuv:x64-windows-static
                   .\vcpkg install libvpx:x64-windows-static
+                  .\vcpkg install libaom:x64-windows-static
                   .\vcpkg install opus:x64-windows-static
 
             # ---------- Rust ----------
