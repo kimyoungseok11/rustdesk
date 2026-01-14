@@ -1,4 +1,4 @@
-name: macOS Build
+name: build-macos
 
 on:
     # push:
@@ -7,44 +7,60 @@ on:
 
 jobs:
     build-macos:
-        runs-on: macos-latest
+        runs-on: macos-14
+
+        env:
+            RUST_BACKTRACE: 1
 
         steps:
-            - name: Checkout repository
+            - name: Checkout
               uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            - name: Install Rust
-              uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: stable
-                  override: true
+            # ---------- libyuv 직접 빌드 ----------
+            - name: Build libyuv
+              run: |
+                  brew install cmake ninja
+                  git clone https://chromium.googlesource.com/libyuv/libyuv
+                  cd libyuv
 
-            - name: Install Flutter
+                  INSTALL_DIR="/opt/homebrew/Cellar/libyuv/0.0.0"
+                  mkdir -p build
+                  cd build
+
+                  cmake .. \
+                    -DCMAKE_BUILD_TYPE=Release \
+                    -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
+                    -DBUILD_SHARED_LIBS=OFF
+
+                  cmake --build .
+                  sudo cmake --install .
+
+            # ---------- Rust ----------
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
+
+            # ---------- Flutter ----------
+            - name: Setup Flutter
               uses: subosito/flutter-action@v2
               with:
                   channel: stable
 
-            - name: Enable macOS Desktop
-              run: flutter config --enable-macos-desktop
+            # ---------- Rust core ----------
+            - name: Build Rust Core
+              run: cargo build --release
 
-            # opus만 필요
-            - name: Install macOS dependencies
-              run: |
-                  brew update
-                  brew install opus
-
-            # 🔥 핵심: default features 제거
-            - name: Build Rust Core (disable libyuv completely)
-              run: cargo build --release --no-default-features
-
+            # ---------- Flutter macOS ----------
             - name: Build macOS App
-              working-directory: flutter
-              run: flutter build macos --no-codesign
+              run: |
+                  cd flutter
+                  flutter pub get
+                  flutter build macos --release
 
+            # ---------- Artifact ----------
             - name: Upload macOS Artifact
               uses: actions/upload-artifact@v4
               with:
                   name: rustdesk-macos
-                  path: flutter/build/macos/Build/Products/Release/RustDesk.app
+                  path: flutter/build/macos/Build/Products/Release
