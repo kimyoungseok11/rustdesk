@@ -18,10 +18,10 @@ jobs:
               with:
                   submodules: recursive
 
-            # ---------- Native deps ----------
+            # ---------- Native deps (FINAL) ----------
             - name: Install native dependencies
               run: |
-                  brew install cmake ninja opus libvpx
+                  brew install cmake ninja opus libvpx aom
 
                   git clone https://chromium.googlesource.com/libyuv/libyuv
                   cd libyuv
