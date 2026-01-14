@@ -31,7 +31,7 @@ jobs:
               run: |
                   echo "OPUS_DIR=$(brew --prefix opus)" >> $GITHUB_ENV
                   echo "PKG_CONFIG_PATH=$(brew --prefix opus)/lib/pkgconfig" >> $GITHUB_ENV
-                  echo "NO_PKG_CONFIG_libyuv=1" >> $GITHUB_ENV
+                  echo "NO_PKG_CONFIG_LIBYUV=1" >> $GITHUB_ENV
 
             - name: Build RustDesk client
               run: |
