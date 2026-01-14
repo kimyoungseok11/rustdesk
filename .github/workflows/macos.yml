@@ -13,7 +13,7 @@ jobs:
               with:
                   submodules: recursive
 
-            # 🔒 Flutter 버전 고정 (중요)
+            # ⚠️ Flutter 버전 고정 (필수)
             - name: Setup Flutter
               uses: subosito/flutter-action@v2
               with:
@@ -31,11 +31,12 @@ jobs:
                   brew update
                   brew install cmake nasm pkg-config
 
-            # 🔥 FFI 바인딩 생성 (없으면 무조건 실패)
-            - name: Generate Rust-Dart FFI bindings
+            # 🔥 반드시 Rust를 먼저 빌드
+            - name: Build Rust (release)
               run: |
-                  cargo run -p flutter_ffi_codegen
+                  cargo build --release
 
+            # 🔥 그 다음 Flutter 빌드
             - name: Build Flutter macOS client
               run: |
                   cd flutter
