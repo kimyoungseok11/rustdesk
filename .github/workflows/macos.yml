@@ -7,10 +7,10 @@ on:
 
 jobs:
     build-macos:
-        runs-on: macos-14 # ✅ 이제 이거 말고 선택지 없음
+        runs-on: macos-14
 
         env:
-            # 🔴 system lib 전부 차단
+            # 🔴 모든 외부 codec 차단
             NO_PKG_CONFIG: '1'
             NO_PKG_CONFIG_libyuv: '1'
             NO_PKG_CONFIG_libvpx: '1'
@@ -18,34 +18,31 @@ jobs:
             NO_PKG_CONFIG_vmaf: '1'
             NO_PKG_CONFIG_opus: '1'
 
-            # ⭐ scrap VMAF 완전 차단 (가장 중요)
+            # ⭐ 핵심: scrap / opus / audio 완전 차단
             SCRAP_DISABLE_VMAF: '1'
+            DISABLE_AUDIO: '1'
 
-            # 🔧 macOS ABI 정렬
             MACOSX_DEPLOYMENT_TARGET: '14.0'
-            SDKROOT: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
-
-            RUSTFLAGS: '-C link-arg=-Wl,-dead_strip'
 
         steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+            - uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            - name: Install Rust
-              uses: dtolnay/rust-toolchain@stable
+            - uses: dtolnay/rust-toolchain@stable
               with:
                   targets: aarch64-apple-darwin
 
-            - name: Rust cache
-              uses: Swatinem/rust-cache@v2
+            - uses: Swatinem/rust-cache@v2
 
-            - name: Build rustdesk
+            - name: Build rustdesk (no audio)
               run: |
-                  cargo build --release --bin rustdesk
+                  cargo build --release \
+                    --bin rustdesk \
+                    --no-default-features \
+                    --features flutter,ipc
 
-            - name: Create .app bundle
+            - name: Bundle app
               run: |
                   APP=RustDesk.app
                   BIN=target/release/rustdesk
@@ -57,32 +54,24 @@ jobs:
 
                   cat > "$APP/Contents/Info.plist" <<EOF
                   <?xml version="1.0" encoding="UTF-8"?>
-                  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-                  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
                   <plist version="1.0">
                   <dict>
                     <key>CFBundleExecutable</key>
                     <string>RustDesk</string>
                     <key>CFBundleIdentifier</key>
-                    <string>com.example.rustdesk</string>
+                    <string>com.rustdesk.app</string>
                     <key>CFBundleName</key>
                     <string>RustDesk</string>
-                    <key>CFBundleVersion</key>
-                    <string>1.4.5</string>
-                    <key>CFBundlePackageType</key>
-                    <string>APPL</string>
                     <key>LSMinimumSystemVersion</key>
                     <string>14.0</string>
                   </dict>
                   </plist>
                   EOF
 
-            - name: Zip app
-              run: |
-                  zip -r RustDesk-macOS.zip RustDesk.app
+            - name: Zip
+              run: zip -r RustDesk-macOS.zip RustDesk.app
 
-            - name: Upload artifact
-              uses: actions/upload-artifact@v4
+            - uses: actions/upload-artifact@v4
               with:
                   name: RustDesk-macOS
                   path: RustDesk-macOS.zip
