@@ -8,16 +8,19 @@ jobs:
         runs-on: macos-latest
 
         steps:
-            - uses: actions/checkout@v4
+            - name: Checkout repository
+              uses: actions/checkout@v4
               with:
                   submodules: recursive
 
+            # 🔒 Flutter 버전 고정 (중요)
             - name: Setup Flutter
               uses: subosito/flutter-action@v2
               with:
-                  channel: stable
+                  flutter-version: '3.19.6'
+                  cache: true
 
-            - name: Install Rust
+            - name: Setup Rust
               uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
@@ -28,13 +31,18 @@ jobs:
                   brew update
                   brew install cmake nasm pkg-config
 
-            - name: Build RustDesk Flutter macOS client
+            # 🔥 FFI 바인딩 생성 (없으면 무조건 실패)
+            - name: Generate Rust-Dart FFI bindings
+              run: |
+                  cargo run -p flutter_ffi_codegen
+
+            - name: Build Flutter macOS client
               run: |
                   cd flutter
                   flutter pub get
                   flutter build macos --release
 
-            - name: Upload app
+            - name: Upload macOS app
               uses: actions/upload-artifact@v4
               with:
                   name: rustdesk-macos-app
