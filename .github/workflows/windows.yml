@@ -1,4 +1,4 @@
-name: Windows Build
+name: build-windows
 
 on:
     # push:
@@ -9,55 +9,54 @@ jobs:
     build-windows:
         runs-on: windows-latest
 
+        env:
+            RUST_BACKTRACE: 1
+            VCPKG_ROOT: C:\vcpkg
+            VCPKG_DEFAULT_TRIPLET: x64-windows-static
+
         steps:
-            # 1. Checkout (submodules 포함)
-            - name: Checkout repository
+            - name: Checkout
               uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            # 2. Rust
-            - name: Install Rust
-              uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: stable
-                  override: true
+            # ---------- vcpkg ----------
+            - name: Setup vcpkg
+              run: |
+                  if (!(Test-Path C:\vcpkg)) {
+                    git clone https://github.com/microsoft/vcpkg C:\vcpkg
+                  }
+                  cd C:\vcpkg
+                  .\bootstrap-vcpkg.bat -disableMetrics
 
-            # 3. Flutter
-            - name: Install Flutter
+                  .\vcpkg install libyuv:x64-windows-static
+                  .\vcpkg install libvpx:x64-windows-static
+                  .\vcpkg install opus:x64-windows-static
+
+            # ---------- Rust ----------
+            - name: Setup Rust
+              uses: dtolnay/rust-toolchain@stable
+
+            # ---------- Flutter ----------
+            - name: Setup Flutter
               uses: subosito/flutter-action@v2
               with:
                   channel: stable
 
-            - name: Enable Windows Desktop
-              run: flutter config --enable-windows-desktop
-
-            # 🔥 핵심 1: vcpkg (static triplet)
-            - name: Setup vcpkg (static)
-              shell: pwsh
-              run: |
-                  if (-Not (Test-Path "C:\vcpkg")) {
-                    git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-                  }
-                  echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-                  echo "VCPKG_DEFAULT_TRIPLET=x64-windows-static" >> $env:GITHUB_ENV
-                  C:\vcpkg\vcpkg.exe install --triplet x64-windows-static
-
-            # 🔥 핵심 2: scrap / opus / vpx build.rs가 env를 확실히 보게 함
+            # ---------- Rust core ----------
             - name: Build Rust Core
-              env:
-                  VCPKG_ROOT: C:\vcpkg
-                  VCPKG_DEFAULT_TRIPLET: x64-windows-static
               run: cargo build --release
 
-            # 6. Flutter Windows
+            # ---------- Flutter Windows ----------
             - name: Build Windows App
-              working-directory: flutter
-              run: flutter build windows
+              run: |
+                  cd flutter
+                  flutter pub get
+                  flutter build windows --release
 
-            # 7. Upload
+            # ---------- Artifact ----------
             - name: Upload Windows Artifact
               uses: actions/upload-artifact@v4
               with:
                   name: rustdesk-windows
-                  path: flutter/build/windows/runner/Release/
+                  path: flutter/build/windows/runner/Release
