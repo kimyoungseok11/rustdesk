@@ -10,12 +10,18 @@ jobs:
         runs-on: macos-14
 
         env:
+            # -------------------------------
+            # 🔴 핵심 환경 변수
+            # -------------------------------
             RUST_BACKTRACE: 1
 
-            # 🔥 이 줄이 최종 해답
+            # macOS deployment target 통일
+            MACOSX_DEPLOYMENT_TARGET: '14.0'
+
+            # Rust 최종 링커를 clang++로 강제
             CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: clang++
 
-            # C/C++ crate 빌드용
+            # C/C++ crate용
             CC: clang
             CXX: clang++
 
@@ -36,7 +42,7 @@ jobs:
                   brew update
                   brew install cmake ninja opus libvpx aom
 
-                  # libyuv 직접 빌드
+                  # libyuv 직접 빌드 (deployment target 동일 적용)
                   git clone https://chromium.googlesource.com/libyuv/libyuv
                   cd libyuv
 
@@ -49,7 +55,8 @@ jobs:
                     -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" \
                     -DBUILD_SHARED_LIBS=OFF \
                     -DCMAKE_C_COMPILER=clang \
-                    -DCMAKE_CXX_COMPILER=clang++
+                    -DCMAKE_CXX_COMPILER=clang++ \
+                    -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
 
                   cmake --build .
                   sudo cmake --install .
