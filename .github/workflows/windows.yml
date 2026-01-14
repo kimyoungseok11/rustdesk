@@ -1,4 +1,4 @@
-name: build-windows
+name: macOS Build
 
 on:
     # push:
@@ -6,79 +6,77 @@ on:
     workflow_dispatch:
 
 jobs:
-    build-windows:
-        runs-on: windows-latest
+    build-macos:
+        runs-on: macos-13 # 🔴 중요: macos-14 쓰면 ABI 터짐
 
         env:
-            RUST_BACKTRACE: 1
+            # ❗️핵심: 시스템 라이브러리 전부 차단
+            NO_PKG_CONFIG: '1'
+            NO_PKG_CONFIG_libyuv: '1'
+            NO_PKG_CONFIG_libvpx: '1'
+            NO_PKG_CONFIG_aom: '1'
+            NO_PKG_CONFIG_vmaf: '1'
+            NO_PKG_CONFIG_opus: '1'
 
-            # vcpkg
-            VCPKG_ROOT: C:\vcpkg
-            VCPKG_DEFAULT_TRIPLET: x64-windows-static
-
-            # 🔥 scrap aom 비활성화 (핵심)
-            NO_PKG_CONFIG_aom: 1
+            MACOSX_DEPLOYMENT_TARGET: '11.0'
+            RUSTFLAGS: '-C link-arg=-Wl,-dead_strip'
 
         steps:
-            # ----------------------------------
-            # 1. Checkout
-            # ----------------------------------
             - name: Checkout
               uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            # ----------------------------------
-            # 2. vcpkg + native deps
-            # ----------------------------------
-            - name: Setup vcpkg
-              shell: powershell
-              run: |
-                  if (!(Test-Path C:\vcpkg)) {
-                    git clone https://github.com/microsoft/vcpkg C:\vcpkg
-                  }
-
-                  cd C:\vcpkg
-                  .\bootstrap-vcpkg.bat -disableMetrics
-
-                  .\vcpkg install libyuv:x64-windows-static
-                  .\vcpkg install libvpx:x64-windows-static
-                  .\vcpkg install opus:x64-windows-static
-
-            # ----------------------------------
-            # 3. Rust
-            # ----------------------------------
-            - name: Setup Rust
+            - name: Install Rust
               uses: dtolnay/rust-toolchain@stable
-
-            # ----------------------------------
-            # 4. Flutter
-            # ----------------------------------
-            - name: Setup Flutter
-              uses: subosito/flutter-action@v2
               with:
-                  channel: stable
+                  targets: aarch64-apple-darwin
 
-            # ----------------------------------
-            # 5. Rust core build
-            # ----------------------------------
-            - name: Build Rust core
-              run: cargo build --release
+            - name: Rust cache
+              uses: Swatinem/rust-cache@v2
 
-            # ----------------------------------
-            # 6. Flutter Windows build
-            # ----------------------------------
-            - name: Build Windows App
+            - name: Build rustdesk (core)
               run: |
-                  cd flutter
-                  flutter pub get
-                  flutter build windows --release
+                  cargo build --release --bin rustdesk
 
-            # ----------------------------------
-            # 7. Artifact
-            # ----------------------------------
-            - name: Upload Windows Artifact
+            - name: Create .app bundle
+              run: |
+                  APP_NAME=RustDesk.app
+                  BIN=target/release/rustdesk
+
+                  mkdir -p "$APP_NAME/Contents/MacOS"
+                  mkdir -p "$APP_NAME/Contents/Resources"
+
+                  cp "$BIN" "$APP_NAME/Contents/MacOS/RustDesk"
+
+                  cat > "$APP_NAME/Contents/Info.plist" <<EOF
+                  <?xml version="1.0" encoding="UTF-8"?>
+                  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+                  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+                  <plist version="1.0">
+                  <dict>
+                    <key>CFBundleName</key>
+                    <string>RustDesk</string>
+                    <key>CFBundleExecutable</key>
+                    <string>RustDesk</string>
+                    <key>CFBundleIdentifier</key>
+                    <string>com.example.rustdesk</string>
+                    <key>CFBundleVersion</key>
+                    <string>1.0.0</string>
+                    <key>CFBundlePackageType</key>
+                    <string>APPL</string>
+                    <key>LSMinimumSystemVersion</key>
+                    <string>11.0</string>
+                  </dict>
+                  </plist>
+                  EOF
+
+            - name: Zip app
+              run: |
+                  zip -r RustDesk-macOS.zip RustDesk.app
+
+            - name: Upload artifact
               uses: actions/upload-artifact@v4
               with:
-                  name: rustdesk-windows
-                  path: flutter/build/windows/runner/Release
+                  name: RustDesk-macOS
+                  path: RustDesk-macOS.zip
