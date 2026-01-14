@@ -10,10 +10,12 @@ jobs:
         runs-on: macos-14
 
         env:
-            # 디버깅
             RUST_BACKTRACE: 1
 
-            # 🔴 링커 문제 해결 핵심
+            # 🔥 이 줄이 최종 해답
+            CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER: clang++
+
+            # C/C++ crate 빌드용
             CC: clang
             CXX: clang++
 
@@ -27,14 +29,14 @@ jobs:
                   submodules: recursive
 
             # ----------------------------------
-            # 2. Native dependencies (FINAL SET)
+            # 2. Native dependencies
             # ----------------------------------
             - name: Install native dependencies
               run: |
                   brew update
                   brew install cmake ninja opus libvpx aom
 
-                  # libyuv은 Homebrew에 없으므로 직접 빌드
+                  # libyuv 직접 빌드
                   git clone https://chromium.googlesource.com/libyuv/libyuv
                   cd libyuv
 
@@ -68,7 +70,6 @@ jobs:
               with:
                   channel: stable
 
-            # (선택) Flutter 상태 확인 – 불안하면 남겨도 됨
             - name: Flutter doctor
               run: flutter doctor -v
 
