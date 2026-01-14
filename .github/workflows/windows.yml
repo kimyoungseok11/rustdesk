@@ -10,39 +10,48 @@ jobs:
         runs-on: windows-latest
 
         steps:
-            - name: Checkout
+            # 1. 코드 체크아웃 (서브모듈 포함)
+            - name: Checkout repository
               uses: actions/checkout@v4
               with:
                   submodules: recursive
 
+            # 2. Rust 설치
             - name: Install Rust
               uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
                   override: true
 
+            # 3. Flutter 설치
             - name: Install Flutter
               uses: subosito/flutter-action@v2
               with:
                   channel: stable
 
-            - name: Install vcpkg and opus
-              run: |
-                  git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-                  C:\vcpkg\bootstrap-vcpkg.bat
-                  C:\vcpkg\vcpkg.exe install opus:x64-windows
-                  echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
-
             - name: Enable Windows Desktop
               run: flutter config --enable-windows-desktop
 
+            # 4. vcpkg (Manifest Mode)
+            - name: Setup vcpkg (manifest mode)
+              shell: pwsh
+              run: |
+                  if (-Not (Test-Path "C:\vcpkg")) {
+                    git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+                  }
+                  echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+                  C:\vcpkg\vcpkg.exe install --triplet x64-windows
+
+            # 5. Rust Core 빌드
             - name: Build Rust Core
               run: cargo build --release
 
+            # 6. Flutter Windows 빌드
             - name: Build Windows App
               working-directory: flutter
               run: flutter build windows
 
+            # 7. 결과물 업로드
             - name: Upload Windows Artifact
               uses: actions/upload-artifact@v4
               with:

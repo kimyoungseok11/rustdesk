@@ -10,37 +10,44 @@ jobs:
         runs-on: macos-latest
 
         steps:
-            - name: Checkout
+            # 1. 코드 체크아웃 (서브모듈 포함)
+            - name: Checkout repository
               uses: actions/checkout@v4
               with:
                   submodules: recursive
 
+            # 2. Rust 설치
             - name: Install Rust
               uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
                   override: true
 
+            # 3. Flutter 설치
             - name: Install Flutter
               uses: subosito/flutter-action@v2
               with:
                   channel: stable
 
-            - name: Install macOS dependencies
-              run: |
-                  brew update
-                  brew install opus
-
             - name: Enable macOS Desktop
               run: flutter config --enable-macos-desktop
 
+            # 🔥 핵심: macOS 네이티브 의존성
+            - name: Install macOS dependencies
+              run: |
+                  brew update
+                  brew install opus libyuv
+
+            # 4. Rust Core 빌드
             - name: Build Rust Core
               run: cargo build --release
 
+            # 5. Flutter macOS 빌드 (codesign 끔)
             - name: Build macOS App
               working-directory: flutter
               run: flutter build macos --no-codesign
 
+            # 6. 결과물 업로드
             - name: Upload macOS Artifact
               uses: actions/upload-artifact@v4
               with:
