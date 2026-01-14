@@ -18,10 +18,11 @@ jobs:
               with:
                   submodules: recursive
 
-            # ---------- libyuv + opus ----------
-            - name: Install native deps
+            # ---------- Native deps ----------
+            - name: Install native dependencies
               run: |
-                  brew install cmake ninja opus
+                  brew install cmake ninja opus libvpx
+
                   git clone https://chromium.googlesource.com/libyuv/libyuv
                   cd libyuv
 
