@@ -2,15 +2,14 @@ name: macOS Build
 
 on:
     workflow_dispatch:
-    # push:
-    #     branches: [master]
-
+# push:
+#     branches: [master]
 jobs:
     build-macos:
         runs-on: macos-14
 
         env:
-            # 모든 외부 codec 차단
+            # pkg-config 전부 차단
             NO_PKG_CONFIG: '1'
             NO_PKG_CONFIG_libyuv: '1'
             NO_PKG_CONFIG_libvpx: '1'
@@ -18,30 +17,64 @@ jobs:
             NO_PKG_CONFIG_vmaf: '1'
             NO_PKG_CONFIG_opus: '1'
 
+            # scrap / audio 관련 차단
             SCRAP_DISABLE_VMAF: '1'
             DISABLE_AUDIO: '1'
 
             MACOSX_DEPLOYMENT_TARGET: '14.0'
 
         steps:
-            - uses: actions/checkout@v4
+            # 1. 소스 체크아웃
+            - name: Checkout
+              uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            - uses: dtolnay/rust-toolchain@stable
+            # 2. magnum-opus dummy patch 생성
+            - name: Patch magnum-opus (dummy)
+              run: |
+                  mkdir -p patches/magnum-opus/src
+
+                  cat > patches/magnum-opus/Cargo.toml <<'EOF'
+                  [package]
+                  name = "magnum-opus"
+                  version = "0.4.0"
+                  edition = "2021"
+
+                  [lib]
+                  path = "src/lib.rs"
+                  EOF
+
+                  cat > patches/magnum-opus/src/lib.rs <<'EOF'
+                  // dummy magnum-opus to disable audio
+                  EOF
+
+                  # Cargo.toml에 patch 섹션 없으면 추가
+                  if ! grep -q 'patch."https://github.com/rustdesk-org/magnum-opus"' Cargo.toml; then
+                    cat >> Cargo.toml <<'EOF'
+
+                  [patch."https://github.com/rustdesk-org/magnum-opus"]
+                  magnum-opus = { path = "patches/magnum-opus" }
+                  EOF
+                  fi
+
+            # 3. Rust 설치
+            - name: Install Rust
+              uses: dtolnay/rust-toolchain@stable
               with:
                   targets: aarch64-apple-darwin
 
-            - uses: Swatinem/rust-cache@v2
+            # 4. 캐시
+            - name: Rust cache
+              uses: Swatinem/rust-cache@v2
 
-            - name: Build rustdesk (no audio)
+            # 5. 빌드 (핵심)
+            - name: Build rustdesk (macOS, no audio)
               run: |
-                  cargo build --release \
-                    --bin rustdesk \
-                    --no-default-features \
-                    --features flutter,cli
+                  cargo build --release --bin rustdesk
 
-            - name: Bundle app
+            # 6. .app 번들 생성
+            - name: Bundle RustDesk.app
               run: |
                   APP=RustDesk.app
                   BIN=target/release/rustdesk
@@ -51,8 +84,10 @@ jobs:
 
                   cp "$BIN" "$APP/Contents/MacOS/RustDesk"
 
-                  cat > "$APP/Contents/Info.plist" <<EOF
+                  cat > "$APP/Contents/Info.plist" <<'EOF'
                   <?xml version="1.0" encoding="UTF-8"?>
+                  <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+                  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
                   <plist version="1.0">
                   <dict>
                     <key>CFBundleExecutable</key>
@@ -61,16 +96,23 @@ jobs:
                     <string>com.rustdesk.app</string>
                     <key>CFBundleName</key>
                     <string>RustDesk</string>
+                    <key>CFBundleVersion</key>
+                    <string>1.4.5</string>
+                    <key>CFBundlePackageType</key>
+                    <string>APPL</string>
                     <key>LSMinimumSystemVersion</key>
                     <string>14.0</string>
                   </dict>
                   </plist>
                   EOF
 
-            - name: Zip
+            # 7. 압축
+            - name: Zip artifact
               run: zip -r RustDesk-macOS.zip RustDesk.app
 
-            - uses: actions/upload-artifact@v4
+            # 8. 업로드
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
               with:
                   name: RustDesk-macOS
                   path: RustDesk-macOS.zip
