@@ -9,6 +9,10 @@ jobs:
     build-macos:
         runs-on: macos-latest
 
+        # 🔥🔥 핵심: job 전체에 env 적용 🔥🔥
+        env:
+            NO_PKG_CONFIG_libyuv: '1'
+
         steps:
             # 1. Checkout (submodules 포함)
             - name: Checkout repository
@@ -32,16 +36,14 @@ jobs:
             - name: Enable macOS Desktop
               run: flutter config --enable-macos-desktop
 
-            # 4. macOS native deps (opus만 필요)
+            # 4. macOS native deps (opus만)
             - name: Install macOS dependencies
               run: |
                   brew update
                   brew install opus
 
-            # build.rs가 100% 인식하도록 cargo build 단계에 env 직접 주입
+            # 5. Rust Core
             - name: Build Rust Core
-              env:
-                  NO_PKG_CONFIG_libyuv: '1'
               run: cargo build --release
 
             # 6. Flutter macOS (codesign 끔)
