@@ -9,25 +9,18 @@ jobs:
     build-macos:
         runs-on: macos-latest
 
-        # 🔥🔥 핵심: job 전체에 env 적용 🔥🔥
-        env:
-            NO_PKG_CONFIG_libyuv: '1'
-
         steps:
-            # 1. Checkout (submodules 포함)
             - name: Checkout repository
               uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            # 2. Rust
             - name: Install Rust
               uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
                   override: true
 
-            # 3. Flutter
             - name: Install Flutter
               uses: subosito/flutter-action@v2
               with:
@@ -36,22 +29,20 @@ jobs:
             - name: Enable macOS Desktop
               run: flutter config --enable-macos-desktop
 
-            # 4. macOS native deps (opus만)
+            # opus만 필요
             - name: Install macOS dependencies
               run: |
                   brew update
                   brew install opus
 
-            # 5. Rust Core
-            - name: Build Rust Core
-              run: cargo build --release
+            # 🔥 핵심: default features 제거
+            - name: Build Rust Core (disable libyuv completely)
+              run: cargo build --release --no-default-features
 
-            # 6. Flutter macOS (codesign 끔)
             - name: Build macOS App
               working-directory: flutter
               run: flutter build macos --no-codesign
 
-            # 7. Upload
             - name: Upload macOS Artifact
               uses: actions/upload-artifact@v4
               with:
