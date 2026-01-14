@@ -4,29 +4,45 @@ on:
     push:
         branches: [master]
     workflow_dispatch:
+
 jobs:
     build-macos:
         runs-on: macos-latest
+
         steps:
-            - uses: actions/checkout@v4
+            - name: Checkout
+              uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            - uses: actions-rs/toolchain@v1
+            - name: Install Rust
+              uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
                   override: true
 
-            - uses: subosito/flutter-action@v2
+            - name: Install Flutter
+              uses: subosito/flutter-action@v2
               with:
                   channel: stable
 
-            - run: flutter config --enable-macos-desktop
-            - run: cargo build --release
-            - run: flutter build macos
-              working-directory: flutter
+            - name: Install macOS dependencies
+              run: |
+                  brew update
+                  brew install opus
 
-            - uses: actions/upload-artifact@v4
+            - name: Enable macOS Desktop
+              run: flutter config --enable-macos-desktop
+
+            - name: Build Rust Core
+              run: cargo build --release
+
+            - name: Build macOS App
+              working-directory: flutter
+              run: flutter build macos --no-codesign
+
+            - name: Upload macOS Artifact
+              uses: actions/upload-artifact@v4
               with:
                   name: rustdesk-macos
                   path: flutter/build/macos/Build/Products/Release/RustDesk.app
