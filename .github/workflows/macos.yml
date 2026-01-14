@@ -10,7 +10,7 @@ jobs:
         runs-on: macos-14
 
         env:
-            # 🔴 모든 외부 codec 차단
+            # 모든 외부 codec 차단
             NO_PKG_CONFIG: '1'
             NO_PKG_CONFIG_libyuv: '1'
             NO_PKG_CONFIG_libvpx: '1'
@@ -18,7 +18,6 @@ jobs:
             NO_PKG_CONFIG_vmaf: '1'
             NO_PKG_CONFIG_opus: '1'
 
-            # ⭐ 핵심: scrap / opus / audio 완전 차단
             SCRAP_DISABLE_VMAF: '1'
             DISABLE_AUDIO: '1'
 
@@ -40,7 +39,7 @@ jobs:
                   cargo build --release \
                     --bin rustdesk \
                     --no-default-features \
-                    --features flutter,ipc
+                    --features flutter,cli
 
             - name: Bundle app
               run: |
