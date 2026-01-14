@@ -18,10 +18,10 @@ jobs:
               with:
                   submodules: recursive
 
-            # ---------- libyuv 직접 빌드 ----------
-            - name: Build libyuv
+            # ---------- libyuv + opus ----------
+            - name: Install native deps
               run: |
-                  brew install cmake ninja
+                  brew install cmake ninja opus
                   git clone https://chromium.googlesource.com/libyuv/libyuv
                   cd libyuv
 
