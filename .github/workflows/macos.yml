@@ -25,7 +25,12 @@ jobs:
             - name: Install build dependencies
               run: |
                   brew update
-                  brew install cmake nasm yasm
+                  brew install cmake nasm yasm opus pkg-config
+
+            - name: Configure opus path
+              run: |
+                  echo "OPUS_DIR=$(brew --prefix opus)" >> $GITHUB_ENV
+                  echo "PKG_CONFIG_PATH=$(brew --prefix opus)/lib/pkgconfig" >> $GITHUB_ENV
 
             - name: Build RustDesk client
               run: |
@@ -47,4 +52,4 @@ jobs:
               with:
                   files: artifacts/rustdesk-macos
               env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOK
