@@ -3,52 +3,39 @@ name: macOS Build
 on:
     workflow_dispatch:
 
-permissions:
-    contents: write
-
 jobs:
     build-macos:
         runs-on: macos-latest
 
         steps:
-            - name: Checkout repository (with submodules)
-              uses: actions/checkout@v4
+            - uses: actions/checkout@v4
               with:
                   submodules: recursive
 
-            - name: Setup Rust toolchain
+            - name: Setup Flutter
+              uses: subosito/flutter-action@v2
+              with:
+                  channel: stable
+
+            - name: Install Rust
               uses: actions-rs/toolchain@v1
               with:
                   toolchain: stable
                   override: true
 
-            - name: Install build dependencies
+            - name: Install macOS dependencies
               run: |
                   brew update
-                  brew install cmake nasm yasm opus pkg-config
+                  brew install cmake nasm pkg-config
 
-            - name: Configure opus path
+            - name: Build RustDesk Flutter macOS client
               run: |
-                  echo "OPUS_DIR=$(brew --prefix opus)" >> $GITHUB_ENV
-                  echo "PKG_CONFIG_PATH=$(brew --prefix opus)/lib/pkgconfig" >> $GITHUB_ENV
+                  cd flutter
+                  flutter pub get
+                  flutter build macos --release
 
-            # 🔥 핵심: scrap(libyuv)을 타는 default features를 완전히 끔
-            - name: Build RustDesk client (disable scrap)
-              run: |
-                  cargo build --release -p rustdesk --no-default-features
-
-            - name: Prepare artifact
-              run: |
-                  mkdir -p artifacts
-                  cp target/release/rustdesk artifacts/rustdesk-macos
-
-            - name: Upload artifact
+            - name: Upload app
               uses: actions/upload-artifact@v4
               with:
-                  name: rustdesk-macos
-                  path: artifacts/rustdesk-macos
-
-            - name: Create GitHub Release
-              uses: softprops/action-gh-release@v1
-              with:
-                  files: artifacts/rustdesk-macos
+                  name: rustdesk-macos-app
+                  path: flutter/build/macos/Build/Products/Release/*.app
