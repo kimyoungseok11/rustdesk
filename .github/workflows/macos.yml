@@ -27,15 +27,15 @@ jobs:
                   brew update
                   brew install cmake nasm yasm opus pkg-config
 
-            - name: Configure native dependencies
+            - name: Configure opus path
               run: |
                   echo "OPUS_DIR=$(brew --prefix opus)" >> $GITHUB_ENV
                   echo "PKG_CONFIG_PATH=$(brew --prefix opus)/lib/pkgconfig" >> $GITHUB_ENV
-                  echo "NO_PKG_CONFIG_LIBYUV=1" >> $GITHUB_ENV
 
-            - name: Build RustDesk client
+            # 🔥 핵심: scrap(libyuv)을 타는 default features를 완전히 끔
+            - name: Build RustDesk client (disable scrap)
               run: |
-                  cargo build --release -p rustdesk
+                  cargo build --release -p rustdesk --no-default-features
 
             - name: Prepare artifact
               run: |
