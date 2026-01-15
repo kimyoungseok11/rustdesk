@@ -25,7 +25,23 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  brew install cmake pkg-config nasm yasm
+                  brew install cmake pkg-config nasm yasm opus vpx libyuv
+
+            - name: Verify opus installation
+              run: |
+                  brew list opus
+                  pkg-config --modversion opus
+                  ls -la /opt/homebrew/Cellar/opus/ || ls -la /usr/local/Cellar/opus/
+
+            - name: Set PKG_CONFIG_PATH
+              run: |
+                  if [ -d "/opt/homebrew" ]; then
+                    echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/opus/lib/pkgconfig" >> $GITHUB_ENV
+                    echo "OPUS_STATIC=1" >> $GITHUB_ENV
+                  else
+                    echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/opt/opus/lib/pkgconfig" >> $GITHUB_ENV
+                    echo "OPUS_STATIC=1" >> $GITHUB_ENV
+                  fi
 
             - name: Install Flutter
               uses: subosito/flutter-action@v2
@@ -54,7 +70,10 @@ jobs:
                       target/
                   key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-            - name: Build RustDesk (without hwcodec)
+            - name: Build RustDesk
+              env:
+                  PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
+                  OPUS_STATIC: '1'
               run: |
                   python3 build.py --flutter
 
@@ -74,6 +93,7 @@ jobs:
                   if [ -f "target/release/rustdesk" ]; then
                     cp target/release/rustdesk release_output/ || true
                   fi
+                  ls -lah release_output/
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
