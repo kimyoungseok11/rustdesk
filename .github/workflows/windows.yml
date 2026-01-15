@@ -20,6 +20,10 @@ jobs:
                   toolchain: stable
                   components: rustfmt, clippy
 
+            - name: Install system dependencies
+              run: |
+                  choco install -y nasm yasm llvm
+
             - name: Install vcpkg
               run: |
                   if (!(Test-Path "C:\vcpkg")) {
