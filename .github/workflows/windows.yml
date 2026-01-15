@@ -235,14 +235,8 @@ jobs:
                   Get-ChildItem "release_output" -Recurse | Format-Table -AutoSize
 
                   # Create build info
-                  $buildInfo = @"
-Build Date: $(Get-Date)
-Commit: ${{ github.sha }}
-Branch: ${{ github.ref_name }}
-Architecture: ${{ steps.arch.outputs.arch }}
-Runner OS: ${{ runner.os }}
-Flutter Build: Yes
-"@
+                  $buildDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                  $buildInfo = "Build Date: $buildDate`nCommit: ${{ github.sha }}`nBranch: ${{ github.ref_name }}`nArchitecture: ${{ steps.arch.outputs.arch }}`nRunner OS: ${{ runner.os }}`nFlutter Build: Yes"
                   Set-Content -Path "release_output\build-info.txt" -Value $buildInfo
 
             - name: Upload artifacts
