@@ -1,4 +1,4 @@
-name: Build RustDesk macOS
+name: Build macOS
 
 on:
     push:
@@ -35,29 +35,55 @@ jobs:
                   ./bootstrap-vcpkg.sh
                   echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
 
-            - name: Install libyuv via vcpkg
+            - name: Install vcpkg dependencies from manifest
               run: |
-                  /Users/runner/vcpkg/vcpkg install libyuv
+                  cd ${{ github.workspace }}
+                  /Users/runner/vcpkg/vcpkg install
+
+            - name: Check libyuv installation
+              run: |
+                  echo "=== vcpkg installed packages ==="
+                  /Users/runner/vcpkg/vcpkg list
+                  echo ""
+                  echo "=== vcpkg_installed directory ==="
+                  ls -la vcpkg_installed/ || echo "No vcpkg_installed directory"
 
             - name: Create libyuv symlink for Homebrew path
               run: |
-                  # scrap이 /opt/homebrew/Cellar/libyuv 경로를 찾으므로 심볼릭 링크 생성
                   sudo mkdir -p /opt/homebrew/Cellar/libyuv
-                  VCPKG_INSTALLED="/Users/runner/vcpkg/installed/$(uname -m)-osx"
 
-                  # vcpkg에서 설치된 libyuv를 homebrew 경로로 링크
-                  if [ -d "$VCPKG_INSTALLED" ]; then
-                    sudo ln -sf $VCPKG_INSTALLED/include /opt/homebrew/Cellar/libyuv/include
-                    sudo ln -sf $VCPKG_INSTALLED/lib /opt/homebrew/Cellar/libyuv/lib
+                  # vcpkg가 설치한 libyuv 경로 찾기
+                  ARCH=$(uname -m)
+                  if [ -d "vcpkg_installed/${ARCH}-osx" ]; then
+                    VCPKG_INSTALLED="$PWD/vcpkg_installed/${ARCH}-osx"
+                  elif [ -d "vcpkg_installed/arm64-osx" ]; then
+                    VCPKG_INSTALLED="$PWD/vcpkg_installed/arm64-osx"
+                  elif [ -d "vcpkg_installed/x64-osx" ]; then
+                    VCPKG_INSTALLED="$PWD/vcpkg_installed/x64-osx"
                   fi
 
-                  echo "=== libyuv installation check ==="
-                  ls -la /opt/homebrew/Cellar/libyuv/ || true
+                  if [ -n "$VCPKG_INSTALLED" ] && [ -d "$VCPKG_INSTALLED" ]; then
+                    echo "Found vcpkg installation at: $VCPKG_INSTALLED"
+                    sudo ln -sf $VCPKG_INSTALLED/include /opt/homebrew/Cellar/libyuv/include
+                    sudo ln -sf $VCPKG_INSTALLED/lib /opt/homebrew/Cellar/libyuv/lib
+                    ls -la /opt/homebrew/Cellar/libyuv/
+                  else
+                    echo "Warning: vcpkg_installed directory not found"
+                  fi
 
             - name: Set environment variables
               run: |
                   BREW_PREFIX=$(brew --prefix)
-                  VCPKG_INSTALLED="/Users/runner/vcpkg/installed/$(uname -m)-osx"
+                  ARCH=$(uname -m)
+                  VCPKG_INSTALLED="$PWD/vcpkg_installed/${ARCH}-osx"
+
+                  if [ ! -d "$VCPKG_INSTALLED" ]; then
+                    if [ -d "vcpkg_installed/arm64-osx" ]; then
+                      VCPKG_INSTALLED="$PWD/vcpkg_installed/arm64-osx"
+                    elif [ -d "vcpkg_installed/x64-osx" ]; then
+                      VCPKG_INSTALLED="$PWD/vcpkg_installed/x64-osx"
+                    fi
+                  fi
 
                   echo "PKG_CONFIG_PATH=${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/opt/opus/lib/pkgconfig:${BREW_PREFIX}/opt/libvpx/lib/pkgconfig:${VCPKG_INSTALLED}/lib/pkgconfig" >> $GITHUB_ENV
                   echo "OPUS_STATIC=1" >> $GITHUB_ENV
@@ -90,8 +116,10 @@ jobs:
             - name: Cache vcpkg
               uses: actions/cache@v3
               with:
-                  path: /Users/runner/vcpkg
-                  key: ${{ runner.os }}-vcpkg-libyuv
+                  path: |
+                      /Users/runner/vcpkg
+                      vcpkg_installed
+                  key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
 
             - name: Build RustDesk
               env:
