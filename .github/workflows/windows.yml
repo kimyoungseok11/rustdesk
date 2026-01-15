@@ -1,50 +1,255 @@
-name: build-windows
+name: Build RustDesk Windows
 
 on:
     workflow_dispatch:
-    # push:
-    #     branches: [master]
 
 jobs:
-    windows:
+    build-windows:
         runs-on: windows-latest
 
-        env:
-            VCPKG_ROOT: C:\vcpkg
-            AOM_DISABLE_VMAF: '1'
-
         steps:
-            - name: Checkout
+            - name: Checkout code
               uses: actions/checkout@v4
+              with:
+                  submodules: 'recursive'
+                  fetch-depth: 0
 
-            - name: Setup vcpkg
-              run: |
-                  if (!(Test-Path "C:\vcpkg")) {
-                    git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
-                  }
-                  C:\vcpkg\bootstrap-vcpkg.bat
-
-            - name: Install vcpkg libraries
-              run: |
-                  C:\vcpkg\vcpkg install `
-                    libyuv:x64-windows-static `
-                    libvpx:x64-windows-static `
-                    opus:x64-windows-static `
-                    aom:x64-windows-static
-
-            - name: Rust toolchain
-              uses: actions-rs/toolchain@v1
+            - name: Install Rust
+              uses: actions-rust-lang/setup-rust-toolchain@v1
               with:
                   toolchain: stable
-                  target: x86_64-pc-windows-msvc
-                  override: true
+                  components: rustfmt, clippy
 
-            - name: Build rustdesk (Windows)
+            - name: Install vcpkg
               run: |
-                  cargo build --release
+                  if (!(Test-Path "C:\vcpkg")) {
+                      git clone https://github.com/microsoft/vcpkg C:\vcpkg
+                      cd C:\vcpkg
+                      .\bootstrap-vcpkg.bat
+                  }
+                  echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
 
-            - name: Upload artifact
+            - name: Cache vcpkg
+              uses: actions/cache@v3
+              with:
+                  path: |
+                      C:\vcpkg
+                      vcpkg_installed
+                  key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-vcpkg-
+
+            - name: Install vcpkg dependencies
+              run: |
+                  $env:VCPKG_ROOT = "C:\vcpkg"
+                  cd ${{ github.workspace }}
+                  C:\vcpkg\vcpkg.exe install --clean-after-build
+
+            - name: Detect architecture and set paths
+              id: arch
+              run: |
+                  $arch = $env:PROCESSOR_ARCHITECTURE
+                  echo "arch=$arch" >> $env:GITHUB_OUTPUT
+
+                  $vcpkg_triplet = "x64-windows"
+                  echo "vcpkg_triplet=$vcpkg_triplet" >> $env:GITHUB_OUTPUT
+
+                  $vcpkg_installed = "${{ github.workspace }}\vcpkg_installed\$vcpkg_triplet"
+                  echo "vcpkg_installed=$vcpkg_installed" >> $env:GITHUB_OUTPUT
+
+                  Write-Host "=== Build environment ==="
+                  Write-Host "Architecture: $arch"
+                  Write-Host "vcpkg triplet: $vcpkg_triplet"
+                  Write-Host "vcpkg installed: $vcpkg_installed"
+
+            - name: Verify vcpkg dependencies
+              run: |
+                  $vcpkg_installed = "${{ steps.arch.outputs.vcpkg_installed }}"
+                  Write-Host "=== vcpkg installation check ==="
+                  if (Test-Path "$vcpkg_installed") {
+                      Write-Host "Found vcpkg installation at: $vcpkg_installed"
+                      Write-Host ""
+                      Write-Host "=== Installed libraries ==="
+                      if (Test-Path "$vcpkg_installed\lib") {
+                          Get-ChildItem "$vcpkg_installed\lib" | Select-Object -First 20
+                      }
+                      Write-Host ""
+                      Write-Host "=== Installed headers ==="
+                      if (Test-Path "$vcpkg_installed\include") {
+                          Get-ChildItem "$vcpkg_installed\include" | Select-Object -First 20
+                      }
+                  } else {
+                      Write-Host "Warning: vcpkg installation not found at $vcpkg_installed"
+                      if (Test-Path "vcpkg_installed") {
+                          Write-Host "Listing vcpkg_installed directory:"
+                          Get-ChildItem "vcpkg_installed" -Recurse | Select-Object -First 30
+                      }
+                  }
+
+            - name: Set build environment
+              run: |
+                  $vcpkg_installed = "${{ steps.arch.outputs.vcpkg_installed }}"
+
+                  # Build environment variables
+                  echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+
+                  # Feature flags
+                  echo "OPUS_STATIC=1" >> $env:GITHUB_ENV
+
+                  Write-Host "=== Environment variables set ==="
+                  Write-Host "VCPKG_ROOT: C:\vcpkg"
+
+            - name: Install Flutter
+              uses: subosito/flutter-action@v2
+              with:
+                  flutter-version: '3.24.3'
+                  channel: 'stable'
+
+            - name: Setup Flutter
+              run: |
+                  flutter config --enable-windows-desktop
+                  flutter --version
+                  flutter doctor -v
+
+            - name: Install Dart/Flutter dependencies
+              run: |
+                  cd flutter
+                  flutter pub get
+                  dart pub global activate ffigen 5.0.1
+
+            - name: Install flutter_rust_bridge_codegen
+              run: |
+                  cargo install flutter_rust_bridge_codegen --version 1.80.1 --force
+
+            - name: Generate Flutter Rust Bridge
+              run: |
+                  $env:PATH += ";$env:USERPROFILE\AppData\Local\Pub\Cache\bin"
+                  flutter_rust_bridge_codegen `
+                    --rust-input .\src\flutter_ffi.rs `
+                    --dart-output .\flutter\lib\generated_bridge.dart `
+                    --c-output .\flutter\windows\runner\bridge_generated.h
+
+            - name: Cache Cargo
+              uses: actions/cache@v3
+              with:
+                  path: |
+                      ~\.cargo\bin\
+                      ~\.cargo\registry\index\
+                      ~\.cargo\registry\cache\
+                      ~\.cargo\git\db\
+                      target\
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-
+
+            - name: Pre-build verification
+              run: |
+                  Write-Host "=== Rust toolchain ==="
+                  rustc --version
+                  cargo --version
+                  Write-Host ""
+                  Write-Host "=== Python version ==="
+                  python --version
+                  Write-Host ""
+                  Write-Host "=== Environment check ==="
+                  Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
+
+            - name: Build RustDesk
+              run: |
+                  python build.py --flutter --hwcodec
+              env:
+                  VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+                  OPUS_STATIC: ${{ env.OPUS_STATIC }}
+
+            - name: Bundle required libraries
+              run: |
+                  $flutter_app = "flutter\build\windows\x64\runner\Release"
+
+                  if (!(Test-Path "$flutter_app")) {
+                      Write-Host "Error: Flutter app bundle not found at $flutter_app"
+                      exit 1
+                  }
+
+                  Write-Host "=== Copying Rust DLL to app bundle ==="
+
+                  # Copy the main Rust library
+                  if (Test-Path "target\release\librustdesk.dll") {
+                      Copy-Item "target\release\librustdesk.dll" "$flutter_app\"
+                      Write-Host "Copied librustdesk.dll"
+                  } else {
+                      Write-Host "Warning: librustdesk.dll not found"
+                  }
+
+                  # Verify the app directory
+                  Write-Host ""
+                  Write-Host "=== App bundle directory ==="
+                  Get-ChildItem "$flutter_app" | Format-Table -AutoSize
+
+            - name: List build outputs
+              if: always()
+              run: |
+                  Write-Host "=== Target directory structure ==="
+                  if (Test-Path "target") {
+                      Get-ChildItem "target" -Directory -Recurse -Depth 2 | Select-Object -First 30
+                  }
+                  Write-Host ""
+                  Write-Host "=== Build artifacts ==="
+                  if (Test-Path "target\release") {
+                      Get-ChildItem "target\release" -Filter "rustdesk*" | Format-Table -AutoSize
+                  }
+                  Write-Host ""
+                  if (Test-Path "flutter\build\windows") {
+                      Write-Host "=== Flutter build directory ==="
+                      Get-ChildItem "flutter\build\windows" -Recurse -Depth 3 | Select-Object -First 50
+                  }
+
+            - name: Create release directory
+              if: success()
+              run: |
+                  New-Item -ItemType Directory -Force -Path release_output
+
+                  # Flutter build creates .exe and DLLs in flutter/build/windows/x64/runner/Release/
+                  $flutter_app_path = "flutter\build\windows\x64\runner\Release"
+
+                  # Copy Flutter build output if exists
+                  if (Test-Path "$flutter_app_path") {
+                      Write-Host "Found Flutter build output at: $flutter_app_path"
+                      Copy-Item -Path "$flutter_app_path\*" -Destination "release_output\" -Recurse -Force
+
+                      # Get app bundle size
+                      Write-Host "App bundle size:"
+                      $size = (Get-ChildItem "$flutter_app_path" -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
+                      Write-Host "$([math]::Round($size, 2)) MB"
+                  } else {
+                      Write-Host "Warning: Flutter build output not found at $flutter_app_path"
+                  }
+
+                  # Copy standalone binary if exists
+                  if (Test-Path "target\release\rustdesk.exe") {
+                      Write-Host "Copying standalone binary..."
+                      Copy-Item "target\release\rustdesk.exe" "release_output\"
+                  }
+
+                  Write-Host ""
+                  Write-Host "=== Release output contents ==="
+                  Get-ChildItem "release_output" -Recurse | Format-Table -AutoSize
+
+                  # Create build info
+                  $buildInfo = @"
+Build Date: $(Get-Date)
+Commit: ${{ github.sha }}
+Branch: ${{ github.ref_name }}
+Architecture: ${{ steps.arch.outputs.arch }}
+Runner OS: ${{ runner.os }}
+Flutter Build: Yes
+"@
+                  Set-Content -Path "release_output\build-info.txt" -Value $buildInfo
+
+            - name: Upload artifacts
+              if: success()
               uses: actions/upload-artifact@v4
               with:
-                  name: rustdesk-windows
-                  path: target\release\rustdesk.exe
+                  name: rustdesk-windows-${{ steps.arch.outputs.arch }}-${{ github.sha }}
+                  path: release_output\
+                  if-no-files-found: error
+                  retention-days: 30
