@@ -2,9 +2,9 @@ name: Build macOS
 
 on:
     # push:
-    #     branches: [main, master]
+    #   branches: [ main, master ]
     # pull_request:
-    #     branches: [main, master]
+    #   branches: [ main, master ]
     workflow_dispatch:
 
 jobs:
@@ -25,26 +25,7 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  brew install llvm cmake ninja nasm yasm pkg-config
-
-            - name: Setup LLVM environment
-              run: |
-                  echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
-                  echo "LLVM_HOME=$(brew --prefix llvm)" >> $GITHUB_ENV
-                  echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
-
-            - name: Install vcpkg
-              run: |
-                  cd /Users/runner
-                  git clone https://github.com/microsoft/vcpkg
-                  cd vcpkg
-                  ./bootstrap-vcpkg.sh
-                  echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
-
-            - name: Install vcpkg dependencies
-              run: |
-                  cd ${{ github.workspace }}
-                  /Users/runner/vcpkg/vcpkg install
+                  brew install cmake pkg-config nasm yasm
 
             - name: Install Flutter
               uses: subosito/flutter-action@v2
@@ -73,50 +54,38 @@ jobs:
                       target/
                   key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-            - name: Cache vcpkg
-              uses: actions/cache@v3
-              with:
-                  path: |
-                      /Users/runner/vcpkg
-                      vcpkg_installed
-                  key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
-
-            - name: Set environment variables
+            - name: Build RustDesk (without hwcodec)
               run: |
-                  echo "MACOSX_DEPLOYMENT_TARGET=10.14" >> $GITHUB_ENV
-                  echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
-                  echo "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=true" >> $GITHUB_ENV
-
-            - name: Build RustDesk
-              env:
-                  VCPKG_ROOT: /Users/runner/vcpkg
-                  MACOSX_DEPLOYMENT_TARGET: '10.14'
-                  LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
-              run: |
-                  python3 build.py --flutter --hwcodec
+                  python3 build.py --flutter
 
             - name: List build outputs
               if: always()
               run: |
-                  echo "=== Searching for build outputs ==="
-                  find target -name "*.app" -o -name "*.dmg" || true
-                  echo "=== Contents of target/release ==="
-                  ls -la target/release/ || true
+                  echo "=== Build outputs ==="
+                  find target/release -type f -name "rustdesk*" || true
+                  ls -lah target/release/bundle/osx/ 2>/dev/null || echo "No bundle directory found"
+
+            - name: Create release directory
+              run: |
+                  mkdir -p release_output
+                  if [ -d "target/release/bundle/osx" ]; then
+                    cp -r target/release/bundle/osx/* release_output/ || true
+                  fi
+                  if [ -f "target/release/rustdesk" ]; then
+                    cp target/release/rustdesk release_output/ || true
+                  fi
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
               with:
-                  name: rustdesk-macos
-                  path: |
-                      target/release/bundle/osx/*.dmg
-                      target/release/bundle/osx/*.app
+                  name: rustdesk-macos-${{ github.sha }}
+                  path: release_output/
                   if-no-files-found: warn
 
             - name: Upload Release Asset
               if: startsWith(github.ref, 'refs/tags/')
               uses: softprops/action-gh-release@v1
               with:
-                  files: |
-                      target/release/bundle/osx/*.dmg
+                  files: release_output/*
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
