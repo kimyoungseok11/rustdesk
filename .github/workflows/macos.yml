@@ -1,4 +1,4 @@
-name: Build macOS
+name: Build RustDesk macOS
 
 on:
     # push:
@@ -25,7 +25,7 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  brew install llvm cmake ninja nasm yasm pkg-config automake autoconf libtool
+                  brew install llvm cmake ninja nasm yasm pkg-config
 
             - name: Setup LLVM environment
               run: |
@@ -43,7 +43,8 @@ jobs:
 
             - name: Install vcpkg dependencies
               run: |
-                  /Users/runner/vcpkg/vcpkg install libyuv
+                  cd ${{ github.workspace }}
+                  /Users/runner/vcpkg/vcpkg install
 
             - name: Install Flutter
               uses: subosito/flutter-action@v2
@@ -75,31 +76,32 @@ jobs:
             - name: Cache vcpkg
               uses: actions/cache@v3
               with:
-                  path: /Users/runner/vcpkg
+                  path: |
+                      /Users/runner/vcpkg
+                      vcpkg_installed
                   key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
 
-            - name: Set environment variables for hwcodec
+            - name: Set environment variables
               run: |
                   echo "MACOSX_DEPLOYMENT_TARGET=10.14" >> $GITHUB_ENV
                   echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
                   echo "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=true" >> $GITHUB_ENV
 
-            - name: Verify submodules
-              run: |
-                  git submodule status
-                  ls -la libs/
-
             - name: Build RustDesk
               env:
                   VCPKG_ROOT: /Users/runner/vcpkg
                   MACOSX_DEPLOYMENT_TARGET: '10.14'
+                  LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
               run: |
                   python3 build.py --flutter --hwcodec
 
             - name: List build outputs
               if: always()
               run: |
-                  find target/release -name "*.app" -o -name "*.dmg" || true
+                  echo "=== Searching for build outputs ==="
+                  find target -name "*.app" -o -name "*.dmg" || true
+                  echo "=== Contents of target/release ==="
+                  ls -la target/release/ || true
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
