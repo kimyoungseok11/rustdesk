@@ -1,4 +1,4 @@
-name: Build macOS
+name: Build RustDesk macOS
 
 on:
     # push:
@@ -25,23 +25,24 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  brew install cmake pkg-config nasm yasm opus vpx libyuv
+                  brew install cmake pkg-config nasm yasm opus libvpx libyuv
 
-            - name: Verify opus installation
+            - name: Verify installations
               run: |
-                  brew list opus
-                  pkg-config --modversion opus
-                  ls -la /opt/homebrew/Cellar/opus/ || ls -la /usr/local/Cellar/opus/
+                  echo "=== Opus ==="
+                  pkg-config --modversion opus || echo "opus not found via pkg-config"
+                  echo "=== libvpx ==="
+                  pkg-config --modversion vpx || echo "vpx not found via pkg-config"
+                  echo "=== Homebrew prefix ==="
+                  brew --prefix
 
             - name: Set PKG_CONFIG_PATH
               run: |
-                  if [ -d "/opt/homebrew" ]; then
-                    echo "PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig:/opt/homebrew/opt/opus/lib/pkgconfig" >> $GITHUB_ENV
-                    echo "OPUS_STATIC=1" >> $GITHUB_ENV
-                  else
-                    echo "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/opt/opus/lib/pkgconfig" >> $GITHUB_ENV
-                    echo "OPUS_STATIC=1" >> $GITHUB_ENV
-                  fi
+                  BREW_PREFIX=$(brew --prefix)
+                  echo "PKG_CONFIG_PATH=${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/opt/opus/lib/pkgconfig:${BREW_PREFIX}/opt/libvpx/lib/pkgconfig" >> $GITHUB_ENV
+                  echo "OPUS_STATIC=1" >> $GITHUB_ENV
+                  echo "CPATH=${BREW_PREFIX}/include" >> $GITHUB_ENV
+                  echo "LIBRARY_PATH=${BREW_PREFIX}/lib" >> $GITHUB_ENV
 
             - name: Install Flutter
               uses: subosito/flutter-action@v2
@@ -74,6 +75,8 @@ jobs:
               env:
                   PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
                   OPUS_STATIC: '1'
+                  CPATH: ${{ env.CPATH }}
+                  LIBRARY_PATH: ${{ env.LIBRARY_PATH }}
               run: |
                   python3 build.py --flutter
 
@@ -81,7 +84,8 @@ jobs:
               if: always()
               run: |
                   echo "=== Build outputs ==="
-                  find target/release -type f -name "rustdesk*" || true
+                  find target/release -type f -name "rustdesk*" -o -name "*.app" -o -name "*.dmg" || true
+                  echo "=== Bundle directory ==="
                   ls -lah target/release/bundle/osx/ 2>/dev/null || echo "No bundle directory found"
 
             - name: Create release directory
@@ -93,6 +97,7 @@ jobs:
                   if [ -f "target/release/rustdesk" ]; then
                     cp target/release/rustdesk release_output/ || true
                   fi
+                  echo "=== Release output contents ==="
                   ls -lah release_output/
 
             - name: Upload artifacts
