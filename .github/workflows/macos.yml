@@ -223,16 +223,31 @@ jobs:
               run: |
                   mkdir -p release_output
 
-                  # Copy .app bundle if exists
+                  # Flutter build creates .app in flutter/build/macos/Build/Products/Release/
+                  FLUTTER_APP_PATH="flutter/build/macos/Build/Products/Release/RustDesk.app"
+
+                  # Copy Flutter .app bundle if exists
+                  if [ -d "$FLUTTER_APP_PATH" ]; then
+                    echo "Found Flutter .app bundle at: $FLUTTER_APP_PATH"
+                    cp -r "$FLUTTER_APP_PATH" release_output/
+
+                    # Get app bundle size
+                    echo "App bundle size:"
+                    du -sh "$FLUTTER_APP_PATH"
+                  else
+                    echo "Warning: Flutter .app bundle not found at $FLUTTER_APP_PATH"
+                  fi
+
+                  # Also check cargo bundle location (legacy builds)
                   if [ -d "target/release/bundle/osx" ]; then
-                    echo "Copying macOS bundle..."
+                    echo "Found legacy cargo bundle..."
                     cp -r target/release/bundle/osx/* release_output/ 2>/dev/null || true
                   fi
 
                   # Copy DMG if exists
-                  if find target/release -name "*.dmg" -print -quit | grep -q .; then
+                  if find . -name "*.dmg" -print -quit | grep -q .; then
                     echo "Copying DMG files..."
-                    find target/release -name "*.dmg" -exec cp {} release_output/ \;
+                    find . -name "*.dmg" -exec cp {} release_output/ \;
                   fi
 
                   # Copy standalone binary if exists
@@ -245,6 +260,13 @@ jobs:
                   echo "=== Release output contents ==="
                   ls -lah release_output/
 
+                  # Show detailed contents if .app exists
+                  if [ -d "release_output/RustDesk.app" ]; then
+                    echo ""
+                    echo "=== RustDesk.app structure ==="
+                    ls -lah release_output/RustDesk.app/Contents/MacOS/
+                  fi
+
                   # Create build info
                   cat > release_output/build-info.txt << EOF
                   Build Date: $(date)
@@ -252,6 +274,7 @@ jobs:
                   Branch: ${{ github.ref_name }}
                   Architecture: ${{ steps.arch.outputs.arch }}
                   Runner OS: ${{ runner.os }}
+                  Flutter Build: Yes
                   EOF
 
             - name: Upload artifacts
