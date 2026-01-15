@@ -235,6 +235,37 @@ jobs:
                   echo "=== Final library dependencies ==="
                   otool -L "$FLUTTER_APP/Contents/MacOS/RustDesk" | grep -E "(librustdesk|@rpath)" || echo "No custom libraries found"
 
+            - name: Code sign app bundle (ad-hoc)
+              run: |
+                  FLUTTER_APP="flutter/build/macos/Build/Products/Release/RustDesk.app"
+
+                  echo "=== Applying ad-hoc code signature ==="
+
+                  # Sign all dylibs in Frameworks first
+                  find "$FLUTTER_APP/Contents/Frameworks" -name "*.dylib" -exec codesign --force --deep --sign - {} \; || true
+
+                  # Sign all framework bundles
+                  find "$FLUTTER_APP/Contents/Frameworks" -name "*.framework" -exec codesign --force --deep --sign - {} \; || true
+
+                  # Sign the main executable
+                  codesign --force --sign - "$FLUTTER_APP/Contents/MacOS/RustDesk"
+
+                  # Sign the service binary if it exists
+                  if [ -f "$FLUTTER_APP/Contents/MacOS/service" ]; then
+                    codesign --force --sign - "$FLUTTER_APP/Contents/MacOS/service"
+                  fi
+
+                  # Finally, sign the entire app bundle
+                  codesign --force --deep --sign - "$FLUTTER_APP"
+
+                  echo ""
+                  echo "=== Verifying code signature ==="
+                  codesign --verify --deep --verbose=2 "$FLUTTER_APP" || echo "Verification warning (may still work)"
+
+                  echo ""
+                  echo "=== Signature details ==="
+                  codesign -dvvv "$FLUTTER_APP" 2>&1 | head -20
+
             - name: List build outputs
               if: always()
               run: |
