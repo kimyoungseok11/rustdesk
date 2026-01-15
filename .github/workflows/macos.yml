@@ -2,9 +2,6 @@ name: Build RustDesk macOS
 
 on:
     push:
-        branches: [main, master]
-    pull_request:
-        branches: [main, master]
     workflow_dispatch:
 
 jobs:
@@ -22,78 +19,112 @@ jobs:
               uses: actions-rust-lang/setup-rust-toolchain@v1
               with:
                   toolchain: stable
+                  components: rustfmt, clippy
 
-            - name: Install dependencies
+            - name: Install system dependencies
               run: |
-                  brew install cmake pkg-config nasm yasm opus libvpx
-
-            - name: Verify libvpx installation
-              run: |
-                  echo "=== libvpx location ==="
-                  brew list libvpx | grep -E '\.(a|dylib)$' || true
-                  echo ""
-                  echo "=== pkg-config check ==="
-                  pkg-config --libs --cflags vpx || true
-                  echo ""
-                  echo "=== Homebrew prefix ==="
-                  brew --prefix libvpx
+                  brew install cmake pkg-config nasm yasm
 
             - name: Install vcpkg
               run: |
                   cd /Users/runner
-                  git clone https://github.com/microsoft/vcpkg
+                  git clone --depth=1 https://github.com/microsoft/vcpkg
                   cd vcpkg
                   ./bootstrap-vcpkg.sh
                   echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
 
+            - name: Cache vcpkg
+              uses: actions/cache@v3
+              with:
+                  path: |
+                      /Users/runner/vcpkg
+                      vcpkg_installed
+                  key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-vcpkg-
+
             - name: Install vcpkg dependencies
               run: |
+                  export VCPKG_ROOT=/Users/runner/vcpkg
                   cd ${{ github.workspace }}
-                  /Users/runner/vcpkg/vcpkg install
+                  $VCPKG_ROOT/vcpkg install --clean-after-build
 
-            - name: Create libyuv symlink
+            - name: Detect architecture and set paths
+              id: arch
               run: |
-                  sudo mkdir -p /opt/homebrew/Cellar/libyuv
-
                   ARCH=$(uname -m)
-                  if [ -d "vcpkg_installed/${ARCH}-osx" ]; then
-                    VCPKG_INSTALLED="$PWD/vcpkg_installed/${ARCH}-osx"
-                  elif [ -d "vcpkg_installed/arm64-osx" ]; then
-                    VCPKG_INSTALLED="$PWD/vcpkg_installed/arm64-osx"
-                  elif [ -d "vcpkg_installed/x64-osx" ]; then
-                    VCPKG_INSTALLED="$PWD/vcpkg_installed/x64-osx"
-                  fi
+                  echo "arch=$ARCH" >> $GITHUB_OUTPUT
 
-                  if [ -n "$VCPKG_INSTALLED" ] && [ -d "$VCPKG_INSTALLED" ]; then
-                    echo "Found vcpkg installation at: $VCPKG_INSTALLED"
-                    sudo ln -sf $VCPKG_INSTALLED/include /opt/homebrew/Cellar/libyuv/include
-                    sudo ln -sf $VCPKG_INSTALLED/lib /opt/homebrew/Cellar/libyuv/lib
-                  fi
-
-            - name: Set environment variables
-              run: |
                   BREW_PREFIX=$(brew --prefix)
-                  ARCH=$(uname -m)
-                  VCPKG_INSTALLED="$PWD/vcpkg_installed/${ARCH}-osx"
+                  echo "brew_prefix=$BREW_PREFIX" >> $GITHUB_OUTPUT
 
-                  if [ ! -d "$VCPKG_INSTALLED" ]; then
-                    if [ -d "vcpkg_installed/arm64-osx" ]; then
-                      VCPKG_INSTALLED="$PWD/vcpkg_installed/arm64-osx"
-                    elif [ -d "vcpkg_installed/x64-osx" ]; then
-                      VCPKG_INSTALLED="$PWD/vcpkg_installed/x64-osx"
-                    fi
+                  if [ "$ARCH" = "arm64" ]; then
+                    VCPKG_TRIPLET="arm64-osx"
+                  else
+                    VCPKG_TRIPLET="x64-osx"
+                  fi
+                  echo "vcpkg_triplet=$VCPKG_TRIPLET" >> $GITHUB_OUTPUT
+
+                  VCPKG_INSTALLED="${{ github.workspace }}/vcpkg_installed/${VCPKG_TRIPLET}"
+                  echo "vcpkg_installed=$VCPKG_INSTALLED" >> $GITHUB_OUTPUT
+
+                  echo "=== Build environment ==="
+                  echo "Architecture: $ARCH"
+                  echo "Homebrew prefix: $BREW_PREFIX"
+                  echo "vcpkg triplet: $VCPKG_TRIPLET"
+                  echo "vcpkg installed: $VCPKG_INSTALLED"
+
+            - name: Verify vcpkg dependencies
+              run: |
+                  VCPKG_INSTALLED="${{ steps.arch.outputs.vcpkg_installed }}"
+                  echo "=== vcpkg installation check ==="
+                  if [ -d "$VCPKG_INSTALLED" ]; then
+                    echo "Found vcpkg installation at: $VCPKG_INSTALLED"
+                    echo ""
+                    echo "=== Installed libraries ==="
+                    ls -la "$VCPKG_INSTALLED/lib/" 2>/dev/null || echo "No lib directory"
+                    echo ""
+                    echo "=== Installed headers ==="
+                    ls -la "$VCPKG_INSTALLED/include/" 2>/dev/null || echo "No include directory"
+                    echo ""
+                    echo "=== pkg-config files ==="
+                    ls -la "$VCPKG_INSTALLED/lib/pkgconfig/" 2>/dev/null || echo "No pkgconfig directory"
+                  else
+                    echo "Warning: vcpkg installation not found at $VCPKG_INSTALLED"
+                    echo "Listing vcpkg_installed directory:"
+                    ls -la vcpkg_installed/ 2>/dev/null || echo "No vcpkg_installed directory"
                   fi
 
-                  # PKG_CONFIG_PATH
-                  echo "PKG_CONFIG_PATH=${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/opt/opus/lib/pkgconfig:${BREW_PREFIX}/opt/libvpx/lib/pkgconfig:${VCPKG_INSTALLED}/lib/pkgconfig" >> $GITHUB_ENV
+            - name: Set build environment
+              run: |
+                  BREW_PREFIX="${{ steps.arch.outputs.brew_prefix }}"
+                  VCPKG_INSTALLED="${{ steps.arch.outputs.vcpkg_installed }}"
 
-                  # RUSTFLAGS에 링커 경로 추가
-                  echo "RUSTFLAGS=-L ${BREW_PREFIX}/lib -L ${BREW_PREFIX}/opt/libvpx/lib -L ${BREW_PREFIX}/opt/opus/lib -L ${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
-
-                  echo "OPUS_STATIC=1" >> $GITHUB_ENV
-                  echo "CPATH=${BREW_PREFIX}/include:${VCPKG_INSTALLED}/include" >> $GITHUB_ENV
-                  echo "LIBRARY_PATH=${BREW_PREFIX}/lib:${BREW_PREFIX}/opt/libvpx/lib:${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
+                  # Build environment variables
                   echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
+                  echo "MACOSX_DEPLOYMENT_TARGET=10.14" >> $GITHUB_ENV
+
+                  # pkg-config paths for both Homebrew and vcpkg
+                  PKG_CONFIG_PATH="${VCPKG_INSTALLED}/lib/pkgconfig"
+                  echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}" >> $GITHUB_ENV
+
+                  # Compiler and linker paths
+                  echo "CPATH=${VCPKG_INSTALLED}/include" >> $GITHUB_ENV
+                  echo "LIBRARY_PATH=${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
+                  echo "DYLD_LIBRARY_PATH=${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
+
+                  # Rust flags for linking
+                  RUSTFLAGS="-C link-arg=-Wl,-rpath,@executable_path -L ${VCPKG_INSTALLED}/lib"
+                  echo "RUSTFLAGS=${RUSTFLAGS}" >> $GITHUB_ENV
+
+                  # Feature flags
+                  echo "OPUS_STATIC=1" >> $GITHUB_ENV
+
+                  echo "=== Environment variables set ==="
+                  echo "PKG_CONFIG_PATH: ${PKG_CONFIG_PATH}"
+                  echo "RUSTFLAGS: ${RUSTFLAGS}"
+                  echo "CPATH: ${VCPKG_INSTALLED}/include"
+                  echo "LIBRARY_PATH: ${VCPKG_INSTALLED}/lib"
 
             - name: Install Flutter
               uses: subosito/flutter-action@v2
@@ -104,6 +135,7 @@ jobs:
             - name: Setup Flutter
               run: |
                   flutter config --enable-macos-desktop
+                  flutter --version
                   flutter doctor -v
 
             - name: Cache Cargo
@@ -116,60 +148,99 @@ jobs:
                       ~/.cargo/git/db/
                       target/
                   key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-
 
-            - name: Cache vcpkg
-              uses: actions/cache@v3
-              with:
-                  path: |
-                      /Users/runner/vcpkg
-                      vcpkg_installed
-                  key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
-
-            - name: Build RustDesk
-              env:
-                  PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
-                  RUSTFLAGS: ${{ env.RUSTFLAGS }}
-                  OPUS_STATIC: '1'
-                  CPATH: ${{ env.CPATH }}
-                  LIBRARY_PATH: ${{ env.LIBRARY_PATH }}
-                  VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+            - name: Pre-build verification
               run: |
+                  echo "=== Rust toolchain ==="
+                  rustc --version
+                  cargo --version
+                  echo ""
+                  echo "=== Python version ==="
+                  python3 --version
+                  echo ""
+                  echo "=== pkg-config test ==="
+                  pkg-config --list-all | grep -E "(opus|vpx|yuv|aom)" || echo "No matching packages found"
+                  echo ""
                   echo "=== Environment check ==="
+                  echo "VCPKG_ROOT: $VCPKG_ROOT"
                   echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
                   echo "RUSTFLAGS: $RUSTFLAGS"
-                  echo "LIBRARY_PATH: $LIBRARY_PATH"
-                  echo ""
-                  python3 build.py --flutter
+
+            - name: Build RustDesk
+              run: |
+                  python3 build.py --flutter --hwcodec
+              env:
+                  VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+                  PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
+                  RUSTFLAGS: ${{ env.RUSTFLAGS }}
+                  CPATH: ${{ env.CPATH }}
+                  LIBRARY_PATH: ${{ env.LIBRARY_PATH }}
+                  DYLD_LIBRARY_PATH: ${{ env.DYLD_LIBRARY_PATH }}
+                  MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
+                  OPUS_STATIC: ${{ env.OPUS_STATIC }}
 
             - name: List build outputs
               if: always()
               run: |
-                  echo "=== Searching for build outputs ==="
-                  find target/release -type f \( -name "rustdesk*" -o -name "*.app" -o -name "*.dmg" \) 2>/dev/null || true
+                  echo "=== Target directory structure ==="
+                  find target -type d -maxdepth 3 2>/dev/null || true
                   echo ""
-                  echo "=== Bundle directory contents ==="
-                  ls -lRh target/release/bundle/ 2>/dev/null || echo "No bundle directory found"
+                  echo "=== Build artifacts ==="
+                  find target/release -type f \( -name "rustdesk*" -o -name "*.app" -o -name "*.dmg" \) 2>/dev/null || echo "No artifacts found"
+                  echo ""
+                  if [ -d "target/release/bundle" ]; then
+                    echo "=== Bundle directory contents ==="
+                    ls -lRh target/release/bundle/
+                  fi
+                  echo ""
+                  if [ -d "flutter/build/macos" ]; then
+                    echo "=== Flutter build directory ==="
+                    ls -lRh flutter/build/macos/
+                  fi
 
             - name: Create release directory
+              if: success()
               run: |
                   mkdir -p release_output
 
+                  # Copy .app bundle if exists
                   if [ -d "target/release/bundle/osx" ]; then
+                    echo "Copying macOS bundle..."
                     cp -r target/release/bundle/osx/* release_output/ 2>/dev/null || true
                   fi
 
-                  find target/release -name "*.dmg" -exec cp {} release_output/ \; 2>/dev/null || true
-
-                  if [ -f "target/release/rustdesk" ]; then
-                    cp target/release/rustdesk release_output/ 2>/dev/null || true
+                  # Copy DMG if exists
+                  if find target/release -name "*.dmg" -print -quit | grep -q .; then
+                    echo "Copying DMG files..."
+                    find target/release -name "*.dmg" -exec cp {} release_output/ \;
                   fi
 
+                  # Copy standalone binary if exists
+                  if [ -f "target/release/rustdesk" ]; then
+                    echo "Copying standalone binary..."
+                    cp target/release/rustdesk release_output/
+                  fi
+
+                  echo ""
                   echo "=== Release output contents ==="
                   ls -lah release_output/
 
+                  # Create build info
+                  cat > release_output/build-info.txt << EOF
+                  Build Date: $(date)
+                  Commit: ${{ github.sha }}
+                  Branch: ${{ github.ref_name }}
+                  Architecture: ${{ steps.arch.outputs.arch }}
+                  Runner OS: ${{ runner.os }}
+                  EOF
+
             - name: Upload artifacts
+              if: success()
               uses: actions/upload-artifact@v4
               with:
-                  name: rustdesk-macos-${{ github.sha }}
+                  name: rustdesk-macos-${{ steps.arch.outputs.arch }}-${{ github.sha }}
                   path: release_output/
-                  if-no-files-found: warn
+                  if-no-files-found: error
+                  retention-days: 30
