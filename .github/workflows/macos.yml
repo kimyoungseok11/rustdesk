@@ -1,4 +1,4 @@
-name: Build macOS
+name: Build RustDesk macOS
 
 on:
     push:
@@ -27,22 +27,43 @@ jobs:
               run: |
                   brew install cmake pkg-config nasm yasm opus libvpx
 
-            - name: Verify installations
+            - name: Install vcpkg
               run: |
-                  echo "=== Opus ==="
-                  pkg-config --modversion opus || echo "opus not found"
-                  echo "=== libvpx ==="
-                  pkg-config --modversion vpx || echo "vpx not found"
-                  echo "=== Homebrew prefix ==="
-                  brew --prefix
+                  cd /Users/runner
+                  git clone https://github.com/microsoft/vcpkg
+                  cd vcpkg
+                  ./bootstrap-vcpkg.sh
+                  echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
+
+            - name: Install libyuv via vcpkg
+              run: |
+                  /Users/runner/vcpkg/vcpkg install libyuv
+
+            - name: Create libyuv symlink for Homebrew path
+              run: |
+                  # scrap이 /opt/homebrew/Cellar/libyuv 경로를 찾으므로 심볼릭 링크 생성
+                  sudo mkdir -p /opt/homebrew/Cellar/libyuv
+                  VCPKG_INSTALLED="/Users/runner/vcpkg/installed/$(uname -m)-osx"
+
+                  # vcpkg에서 설치된 libyuv를 homebrew 경로로 링크
+                  if [ -d "$VCPKG_INSTALLED" ]; then
+                    sudo ln -sf $VCPKG_INSTALLED/include /opt/homebrew/Cellar/libyuv/include
+                    sudo ln -sf $VCPKG_INSTALLED/lib /opt/homebrew/Cellar/libyuv/lib
+                  fi
+
+                  echo "=== libyuv installation check ==="
+                  ls -la /opt/homebrew/Cellar/libyuv/ || true
 
             - name: Set environment variables
               run: |
                   BREW_PREFIX=$(brew --prefix)
-                  echo "PKG_CONFIG_PATH=${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/opt/opus/lib/pkgconfig:${BREW_PREFIX}/opt/libvpx/lib/pkgconfig" >> $GITHUB_ENV
+                  VCPKG_INSTALLED="/Users/runner/vcpkg/installed/$(uname -m)-osx"
+
+                  echo "PKG_CONFIG_PATH=${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/opt/opus/lib/pkgconfig:${BREW_PREFIX}/opt/libvpx/lib/pkgconfig:${VCPKG_INSTALLED}/lib/pkgconfig" >> $GITHUB_ENV
                   echo "OPUS_STATIC=1" >> $GITHUB_ENV
-                  echo "CPATH=${BREW_PREFIX}/include" >> $GITHUB_ENV
-                  echo "LIBRARY_PATH=${BREW_PREFIX}/lib" >> $GITHUB_ENV
+                  echo "CPATH=${BREW_PREFIX}/include:${VCPKG_INSTALLED}/include" >> $GITHUB_ENV
+                  echo "LIBRARY_PATH=${BREW_PREFIX}/lib:${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
+                  echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
 
             - name: Install Flutter
               uses: subosito/flutter-action@v2
@@ -66,12 +87,19 @@ jobs:
                       target/
                   key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+            - name: Cache vcpkg
+              uses: actions/cache@v3
+              with:
+                  path: /Users/runner/vcpkg
+                  key: ${{ runner.os }}-vcpkg-libyuv
+
             - name: Build RustDesk
               env:
                   PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
                   OPUS_STATIC: '1'
                   CPATH: ${{ env.CPATH }}
                   LIBRARY_PATH: ${{ env.LIBRARY_PATH }}
+                  VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
               run: |
                   python3 build.py --flutter
 
@@ -88,16 +116,13 @@ jobs:
               run: |
                   mkdir -p release_output
 
-                  # .app 파일 복사
                   if [ -d "target/release/bundle/osx" ]; then
                     echo "Found bundle directory"
                     cp -r target/release/bundle/osx/* release_output/ 2>/dev/null || true
                   fi
 
-                  # .dmg 파일 복사
                   find target/release -name "*.dmg" -exec cp {} release_output/ \; 2>/dev/null || true
 
-                  # 실행 파일 복사
                   if [ -f "target/release/rustdesk" ]; then
                     cp target/release/rustdesk release_output/ 2>/dev/null || true
                   fi
@@ -111,11 +136,3 @@ jobs:
                   name: rustdesk-macos-${{ github.sha }}
                   path: release_output/
                   if-no-files-found: warn
-
-            - name: Upload Release Asset
-              if: startsWith(github.ref, 'refs/tags/')
-              uses: softprops/action-gh-release@v1
-              with:
-                  files: release_output/*
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
