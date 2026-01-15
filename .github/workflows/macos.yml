@@ -199,6 +199,42 @@ jobs:
                   MACOSX_DEPLOYMENT_TARGET: ${{ env.MACOSX_DEPLOYMENT_TARGET }}
                   OPUS_STATIC: ${{ env.OPUS_STATIC }}
 
+            - name: Bundle required libraries into .app
+              run: |
+                  FLUTTER_APP="flutter/build/macos/Build/Products/Release/RustDesk.app"
+
+                  if [ ! -d "$FLUTTER_APP" ]; then
+                    echo "Error: Flutter app bundle not found at $FLUTTER_APP"
+                    exit 1
+                  fi
+
+                  echo "=== Copying Rust dylib to app bundle ==="
+
+                  # Copy the main Rust library
+                  if [ -f "target/release/liblibrustdesk.dylib" ]; then
+                    cp target/release/liblibrustdesk.dylib "$FLUTTER_APP/Contents/Frameworks/"
+                    echo "Copied liblibrustdesk.dylib"
+                  else
+                    echo "Warning: liblibrustdesk.dylib not found"
+                  fi
+
+                  # Verify the frameworks directory
+                  echo ""
+                  echo "=== App bundle Frameworks directory ==="
+                  ls -lah "$FLUTTER_APP/Contents/Frameworks/" | head -20
+
+                  # Update dylib paths to use @executable_path
+                  echo ""
+                  echo "=== Updating library paths ==="
+                  install_name_tool -change @rpath/liblibrustdesk.dylib \
+                    @executable_path/../Frameworks/liblibrustdesk.dylib \
+                    "$FLUTTER_APP/Contents/MacOS/RustDesk" || echo "install_name_tool warning (may be OK)"
+
+                  # Verify final linking
+                  echo ""
+                  echo "=== Final library dependencies ==="
+                  otool -L "$FLUTTER_APP/Contents/MacOS/RustDesk" | grep -E "(librustdesk|@rpath)" || echo "No custom libraries found"
+
             - name: List build outputs
               if: always()
               run: |
