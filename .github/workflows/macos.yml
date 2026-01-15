@@ -138,6 +138,17 @@ jobs:
                   flutter --version
                   flutter doctor -v
 
+            - name: Install flutter_rust_bridge_codegen
+              run: |
+                  cargo install flutter_rust_bridge_codegen --version 1.80.1 --force
+
+            - name: Generate Flutter Rust Bridge
+              run: |
+                  flutter_rust_bridge_codegen \
+                    --rust-input ./src/flutter_ffi.rs \
+                    --dart-output ./flutter/lib/generated_bridge.dart \
+                    --c-output ./flutter/macos/Runner/bridge_generated.h
+
             - name: Cache Cargo
               uses: actions/cache@v3
               with:
