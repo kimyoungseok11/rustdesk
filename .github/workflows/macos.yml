@@ -1,7 +1,7 @@
-name: Build RustDesk macOS
+name: Build macOS
 
 on:
-    # push:
+    push:
     #   branches: [ main, master ]
     # pull_request:
     #   branches: [ main, master ]
@@ -25,18 +25,18 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  brew install cmake pkg-config nasm yasm opus libvpx libyuv
+                  brew install cmake pkg-config nasm yasm opus libvpx
 
             - name: Verify installations
               run: |
                   echo "=== Opus ==="
-                  pkg-config --modversion opus || echo "opus not found via pkg-config"
+                  pkg-config --modversion opus || echo "opus not found"
                   echo "=== libvpx ==="
-                  pkg-config --modversion vpx || echo "vpx not found via pkg-config"
+                  pkg-config --modversion vpx || echo "vpx not found"
                   echo "=== Homebrew prefix ==="
                   brew --prefix
 
-            - name: Set PKG_CONFIG_PATH
+            - name: Set environment variables
               run: |
                   BREW_PREFIX=$(brew --prefix)
                   echo "PKG_CONFIG_PATH=${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/opt/opus/lib/pkgconfig:${BREW_PREFIX}/opt/libvpx/lib/pkgconfig" >> $GITHUB_ENV
@@ -54,11 +54,6 @@ jobs:
               run: |
                   flutter config --enable-macos-desktop
                   flutter doctor -v
-
-            - name: Install Rust targets
-              run: |
-                  rustup target add x86_64-apple-darwin
-                  rustup target add aarch64-apple-darwin
 
             - name: Cache Cargo
               uses: actions/cache@v3
@@ -83,20 +78,30 @@ jobs:
             - name: List build outputs
               if: always()
               run: |
-                  echo "=== Build outputs ==="
-                  find target/release -type f -name "rustdesk*" -o -name "*.app" -o -name "*.dmg" || true
-                  echo "=== Bundle directory ==="
-                  ls -lah target/release/bundle/osx/ 2>/dev/null || echo "No bundle directory found"
+                  echo "=== Searching for build outputs ==="
+                  find target/release -type f \( -name "rustdesk*" -o -name "*.app" -o -name "*.dmg" \) 2>/dev/null || true
+                  echo ""
+                  echo "=== Bundle directory contents ==="
+                  ls -lRh target/release/bundle/ 2>/dev/null || echo "No bundle directory found"
 
             - name: Create release directory
               run: |
                   mkdir -p release_output
+
+                  # .app 파일 복사
                   if [ -d "target/release/bundle/osx" ]; then
-                    cp -r target/release/bundle/osx/* release_output/ || true
+                    echo "Found bundle directory"
+                    cp -r target/release/bundle/osx/* release_output/ 2>/dev/null || true
                   fi
+
+                  # .dmg 파일 복사
+                  find target/release -name "*.dmg" -exec cp {} release_output/ \; 2>/dev/null || true
+
+                  # 실행 파일 복사
                   if [ -f "target/release/rustdesk" ]; then
-                    cp target/release/rustdesk release_output/ || true
+                    cp target/release/rustdesk release_output/ 2>/dev/null || true
                   fi
+
                   echo "=== Release output contents ==="
                   ls -lah release_output/
 
