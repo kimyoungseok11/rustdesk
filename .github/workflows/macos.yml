@@ -1,4 +1,4 @@
-name: Build RustDesk macOS
+name: Build macOS
 
 on:
     # push:
