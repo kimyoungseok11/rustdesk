@@ -138,12 +138,19 @@ jobs:
                   flutter --version
                   flutter doctor -v
 
+            - name: Install Dart/Flutter dependencies
+              run: |
+                  cd flutter
+                  flutter pub get
+                  dart pub global activate ffigen 5.0.1
+
             - name: Install flutter_rust_bridge_codegen
               run: |
                   cargo install flutter_rust_bridge_codegen --version 1.80.1 --force
 
             - name: Generate Flutter Rust Bridge
               run: |
+                  export PATH="$PATH:$HOME/.pub-cache/bin"
                   flutter_rust_bridge_codegen \
                     --rust-input ./src/flutter_ffi.rs \
                     --dart-output ./flutter/lib/generated_bridge.dart \
