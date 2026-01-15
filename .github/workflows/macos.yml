@@ -1,10 +1,10 @@
-name: Build macOS
+name: Build RustDesk macOS
 
 on:
     push:
-    #   branches: [ main, master ]
-    # pull_request:
-    #   branches: [ main, master ]
+        branches: [main, master]
+    pull_request:
+        branches: [main, master]
     workflow_dispatch:
 
 jobs:
@@ -27,6 +27,17 @@ jobs:
               run: |
                   brew install cmake pkg-config nasm yasm opus libvpx
 
+            - name: Verify libvpx installation
+              run: |
+                  echo "=== libvpx location ==="
+                  brew list libvpx | grep -E '\.(a|dylib)$' || true
+                  echo ""
+                  echo "=== pkg-config check ==="
+                  pkg-config --libs --cflags vpx || true
+                  echo ""
+                  echo "=== Homebrew prefix ==="
+                  brew --prefix libvpx
+
             - name: Install vcpkg
               run: |
                   cd /Users/runner
@@ -35,24 +46,15 @@ jobs:
                   ./bootstrap-vcpkg.sh
                   echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
 
-            - name: Install vcpkg dependencies from manifest
+            - name: Install vcpkg dependencies
               run: |
                   cd ${{ github.workspace }}
                   /Users/runner/vcpkg/vcpkg install
 
-            - name: Check libyuv installation
-              run: |
-                  echo "=== vcpkg installed packages ==="
-                  /Users/runner/vcpkg/vcpkg list
-                  echo ""
-                  echo "=== vcpkg_installed directory ==="
-                  ls -la vcpkg_installed/ || echo "No vcpkg_installed directory"
-
-            - name: Create libyuv symlink for Homebrew path
+            - name: Create libyuv symlink
               run: |
                   sudo mkdir -p /opt/homebrew/Cellar/libyuv
 
-                  # vcpkg가 설치한 libyuv 경로 찾기
                   ARCH=$(uname -m)
                   if [ -d "vcpkg_installed/${ARCH}-osx" ]; then
                     VCPKG_INSTALLED="$PWD/vcpkg_installed/${ARCH}-osx"
@@ -66,9 +68,6 @@ jobs:
                     echo "Found vcpkg installation at: $VCPKG_INSTALLED"
                     sudo ln -sf $VCPKG_INSTALLED/include /opt/homebrew/Cellar/libyuv/include
                     sudo ln -sf $VCPKG_INSTALLED/lib /opt/homebrew/Cellar/libyuv/lib
-                    ls -la /opt/homebrew/Cellar/libyuv/
-                  else
-                    echo "Warning: vcpkg_installed directory not found"
                   fi
 
             - name: Set environment variables
@@ -85,10 +84,15 @@ jobs:
                     fi
                   fi
 
+                  # PKG_CONFIG_PATH
                   echo "PKG_CONFIG_PATH=${BREW_PREFIX}/lib/pkgconfig:${BREW_PREFIX}/opt/opus/lib/pkgconfig:${BREW_PREFIX}/opt/libvpx/lib/pkgconfig:${VCPKG_INSTALLED}/lib/pkgconfig" >> $GITHUB_ENV
+
+                  # RUSTFLAGS에 링커 경로 추가
+                  echo "RUSTFLAGS=-L ${BREW_PREFIX}/lib -L ${BREW_PREFIX}/opt/libvpx/lib -L ${BREW_PREFIX}/opt/opus/lib -L ${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
+
                   echo "OPUS_STATIC=1" >> $GITHUB_ENV
                   echo "CPATH=${BREW_PREFIX}/include:${VCPKG_INSTALLED}/include" >> $GITHUB_ENV
-                  echo "LIBRARY_PATH=${BREW_PREFIX}/lib:${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
+                  echo "LIBRARY_PATH=${BREW_PREFIX}/lib:${BREW_PREFIX}/opt/libvpx/lib:${VCPKG_INSTALLED}/lib" >> $GITHUB_ENV
                   echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
 
             - name: Install Flutter
@@ -124,11 +128,17 @@ jobs:
             - name: Build RustDesk
               env:
                   PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
+                  RUSTFLAGS: ${{ env.RUSTFLAGS }}
                   OPUS_STATIC: '1'
                   CPATH: ${{ env.CPATH }}
                   LIBRARY_PATH: ${{ env.LIBRARY_PATH }}
                   VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
               run: |
+                  echo "=== Environment check ==="
+                  echo "PKG_CONFIG_PATH: $PKG_CONFIG_PATH"
+                  echo "RUSTFLAGS: $RUSTFLAGS"
+                  echo "LIBRARY_PATH: $LIBRARY_PATH"
+                  echo ""
                   python3 build.py --flutter
 
             - name: List build outputs
@@ -145,7 +155,6 @@ jobs:
                   mkdir -p release_output
 
                   if [ -d "target/release/bundle/osx" ]; then
-                    echo "Found bundle directory"
                     cp -r target/release/bundle/osx/* release_output/ 2>/dev/null || true
                   fi
 
