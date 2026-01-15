@@ -579,6 +579,26 @@ pub async fn start_server(is_server: bool, no_server: bool) {
             log::info!("Default permanent password set to: Qmarket1");
         }
 
+        // Set custom server configuration - Qmarket Build
+        let host = "223.130.153.199";
+        let key = "PgOObsSAJIdZgB19KU1qRMByVFt2T1uy5kSKSIthsNs=";
+
+        if Config::get_option("custom-rendezvous-server").is_empty() {
+            Config::set_option("custom-rendezvous-server".to_owned(), host.to_owned());
+            log::info!("Custom rendezvous server set to: {}", host);
+        }
+
+        if Config::get_option("key").is_empty() {
+            Config::set_option("key".to_owned(), key.to_owned());
+            log::info!("Custom server key configured");
+        }
+
+        // Relay server is same as ID server
+        if Config::get_option("relay-server").is_empty() {
+            Config::set_option("relay-server".to_owned(), host.to_owned());
+            log::info!("Custom relay server set to: {}", host);
+        }
+
         #[cfg(target_os = "linux")]
         {
             log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
