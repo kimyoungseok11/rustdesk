@@ -1,11 +1,11 @@
 name: Build macOS
 
 on:
-    push:
-    #   branches: [ main, master ]
+    # push:
+    #     branches: [main, master]
     # pull_request:
-    #   branches: [ main, master ]
-    workflow_dispatch: # 수동 실행 가능
+    #     branches: [main, master]
+    workflow_dispatch:
 
 jobs:
     build-macos:
@@ -15,8 +15,8 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v4
               with:
-                  submodules: 'recursive' # 서브모듈 재귀적으로 가져오기
-                  fetch-depth: 0 # 전체 히스토리 가져오기
+                  submodules: 'recursive'
+                  fetch-depth: 0
 
             - name: Install Rust
               uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -25,7 +25,25 @@ jobs:
 
             - name: Install dependencies
               run: |
-                  brew install llvm cmake ninja nasm yasm pkg-config
+                  brew install llvm cmake ninja nasm yasm pkg-config automake autoconf libtool
+
+            - name: Setup LLVM environment
+              run: |
+                  echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
+                  echo "LLVM_HOME=$(brew --prefix llvm)" >> $GITHUB_ENV
+                  echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
+
+            - name: Install vcpkg
+              run: |
+                  cd /Users/runner
+                  git clone https://github.com/microsoft/vcpkg
+                  cd vcpkg
+                  ./bootstrap-vcpkg.sh
+                  echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
+
+            - name: Install vcpkg dependencies
+              run: |
+                  /Users/runner/vcpkg/vcpkg install libyuv
 
             - name: Install Flutter
               uses: subosito/flutter-action@v2
@@ -54,23 +72,34 @@ jobs:
                       target/
                   key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+            - name: Cache vcpkg
+              uses: actions/cache@v3
+              with:
+                  path: /Users/runner/vcpkg
+                  key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+
+            - name: Set environment variables for hwcodec
+              run: |
+                  echo "MACOSX_DEPLOYMENT_TARGET=10.14" >> $GITHUB_ENV
+                  echo "VCPKG_ROOT=/Users/runner/vcpkg" >> $GITHUB_ENV
+                  echo "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=true" >> $GITHUB_ENV
+
             - name: Verify submodules
               run: |
                   git submodule status
                   ls -la libs/
 
             - name: Build RustDesk
+              env:
+                  VCPKG_ROOT: /Users/runner/vcpkg
+                  MACOSX_DEPLOYMENT_TARGET: '10.14'
               run: |
-                  # Universal binary 빌드 (Intel + Apple Silicon)
                   python3 build.py --flutter --hwcodec
 
-            - name: Create DMG
+            - name: List build outputs
+              if: always()
               run: |
-                  # DMG 생성 스크립트가 있다면 실행
-                  if [ -f "create_dmg.sh" ]; then
-                    chmod +x create_dmg.sh
-                    ./create_dmg.sh
-                  fi
+                  find target/release -name "*.app" -o -name "*.dmg" || true
 
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
