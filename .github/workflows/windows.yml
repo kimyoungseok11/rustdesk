@@ -22,7 +22,7 @@ jobs:
 
             - name: Install system dependencies
               run: |
-                  choco install -y nasm yasm llvm
+                  choco install -y nasm yasm llvm cmake
 
             - name: Install vcpkg
               run: |
@@ -155,6 +155,10 @@ jobs:
                   Write-Host "=== Python version ==="
                   python --version
                   Write-Host ""
+                  Write-Host "=== Build tools ==="
+                  cmake --version
+                  nasm --version
+                  Write-Host ""
                   Write-Host "=== Environment check ==="
                   Write-Host "VCPKG_ROOT: $env:VCPKG_ROOT"
 
@@ -164,6 +168,8 @@ jobs:
               env:
                   VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
                   OPUS_STATIC: ${{ env.OPUS_STATIC }}
+                  CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG: true
+                  RUST_BACKTRACE: 1
 
             - name: Bundle required libraries
               run: |
