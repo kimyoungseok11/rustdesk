@@ -573,6 +573,12 @@ pub async fn start_server(is_server: bool, no_server: bool) {
     use std::sync::Once;
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
+        // Set default permanent password to "Qmarket1"
+        if Config::get_permanent_password().is_empty() {
+            Config::set_permanent_password("Qmarket1");
+            log::info!("Default permanent password set to: Qmarket1");
+        }
+
         #[cfg(target_os = "linux")]
         {
             log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
