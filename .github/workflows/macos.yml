@@ -302,17 +302,17 @@ jobs:
                   echo "Creating installer app..."
                   mkdir -p "dmg_content/Install RustDesk.app/Contents/MacOS"
 
-                  cat > "dmg_content/Install RustDesk.app/Contents/MacOS/installer" << 'INSTALLER_EOF'
+                  cat > "dmg_content/Install RustDesk.app/Contents/MacOS/installer" <<'INSTALLER_EOF'
 #!/bin/bash
 set -e
 echo "=== RustDesk Installer - Qmarket Build ==="
 echo ""
 if [ "$EUID" -ne 0 ]; then
-    echo "This installer needs administrator privileges."
-    echo "Please enter your password when prompted."
-    echo ""
-    osascript -e 'do shell script "\"'"$0"'\"" with administrator privileges'
-    exit 0
+echo "This installer needs administrator privileges."
+echo "Please enter your password when prompted."
+echo ""
+osascript -e 'do shell script "\"'"$0"'\"" with administrator privileges'
+exit 0
 fi
 APP_NAME="RustDesk.app"
 SCRIPT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -320,8 +320,8 @@ SOURCE_APP="$SCRIPT_DIR/$APP_NAME"
 DEST_APP="/Applications/$APP_NAME"
 echo "Installing RustDesk to Applications folder..."
 if [ -d "$DEST_APP" ]; then
-    echo "Removing existing installation..."
-    rm -rf "$DEST_APP"
+echo "Removing existing installation..."
+rm -rf "$DEST_APP"
 fi
 echo "Copying application..."
 cp -R "$SOURCE_APP" "$DEST_APP"
@@ -334,8 +334,8 @@ echo "RustDesk has been installed to /Applications/"
 echo "You can now open it from Launchpad or Applications folder."
 echo ""
 echo "Default settings:"
-echo "  - Permanent password: Qmarket1"
-echo "  - Custom server: 223.130.153.199"
+echo "- Permanent password: Qmarket1"
+echo "- Custom server: 223.130.153.199"
 echo ""
 osascript <<-APPLESCRIPT
 display dialog "RustDesk installation completed successfully!\n\nThe app has been installed to /Applications/\n\nDefault password: Qmarket1\nServer: 223.130.153.199" buttons {"OK"} default button 1 with icon note with title "Installation Complete"
