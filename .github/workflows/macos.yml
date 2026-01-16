@@ -234,33 +234,17 @@ jobs:
                   echo "=== Final library dependencies ==="
                   otool -L "$FLUTTER_APP/Contents/MacOS/RustDesk" | grep -E "(librustdesk|@rpath)" || echo "No custom libraries found"
 
-            - name: Add self-quarantine removal wrapper
+            - name: Remove quarantine attributes
               run: |
                   FLUTTER_APP="flutter/build/macos/Build/Products/Release/RustDesk.app"
 
-                  # Rename original executable
-                  mv "$FLUTTER_APP/Contents/MacOS/RustDesk" "$FLUTTER_APP/Contents/MacOS/RustDesk.bin"
+                  # Remove any existing quarantine attributes
+                  echo "=== Removing quarantine attributes from app bundle ==="
+                  xattr -cr "$FLUTTER_APP" 2>/dev/null || true
 
-                  # Create wrapper script that removes quarantine on first run
-                  cat > "$FLUTTER_APP/Contents/MacOS/RustDesk" << 'WRAPPER_EOF'
-                  #!/bin/bash
-                  # Auto-remove quarantine attribute on first run
-                  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-                  APP_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-
-                  # Remove quarantine attribute from the entire app bundle
-                  if xattr -p com.apple.quarantine "$APP_DIR" &>/dev/null; then
-                      xattr -dr com.apple.quarantine "$APP_DIR" 2>/dev/null || true
-                  fi
-
-                  # Execute the real application
-                  exec "$SCRIPT_DIR/RustDesk.bin" "$@"
-                  WRAPPER_EOF
-
-                  # Make wrapper executable
-                  chmod +x "$FLUTTER_APP/Contents/MacOS/RustDesk"
-
-                  echo "=== Created self-removing quarantine wrapper ==="
+                  # Verify removal
+                  echo "=== Verifying quarantine removal ==="
+                  xattr -l "$FLUTTER_APP" | grep -i quarantine || echo "No quarantine attributes found"
 
             - name: Code sign app bundle (ad-hoc)
               run: |
