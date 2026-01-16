@@ -234,18 +234,6 @@ jobs:
                   echo "=== Final library dependencies ==="
                   otool -L "$FLUTTER_APP/Contents/MacOS/RustDesk" | grep -E "(librustdesk|@rpath)" || echo "No custom libraries found"
 
-            - name: Remove quarantine attributes
-              run: |
-                  FLUTTER_APP="flutter/build/macos/Build/Products/Release/RustDesk.app"
-
-                  # Remove any existing quarantine attributes
-                  echo "=== Removing quarantine attributes from app bundle ==="
-                  xattr -cr "$FLUTTER_APP" 2>/dev/null || true
-
-                  # Verify removal
-                  echo "=== Verifying quarantine removal ==="
-                  xattr -l "$FLUTTER_APP" | grep -i quarantine || echo "No quarantine attributes found"
-
             - name: Code sign app bundle (ad-hoc)
               run: |
                   FLUTTER_APP="flutter/build/macos/Build/Products/Release/RustDesk.app"
@@ -258,8 +246,7 @@ jobs:
                   # Sign all framework bundles
                   find "$FLUTTER_APP/Contents/Frameworks" -name "*.framework" -exec codesign --force --deep --sign - {} \; || true
 
-                  # Sign the renamed binary and wrapper
-                  codesign --force --sign - "$FLUTTER_APP/Contents/MacOS/RustDesk.bin"
+                  # Sign the main executable
                   codesign --force --sign - "$FLUTTER_APP/Contents/MacOS/RustDesk"
 
                   # Sign the service binary if it exists
@@ -335,65 +322,6 @@ jobs:
                     cp target/release/rustdesk release_output/
                   fi
 
-                  # Create installation script
-                  cat > release_output/install.sh << 'INSTALL_EOF'
-                  #!/bin/bash
-                  echo "=== RustDesk Qmarket Build - 설치 스크립트 ==="
-                  echo ""
-                  APP_NAME="RustDesk.app"
-                  if [ ! -d "$APP_NAME" ]; then
-                      echo "오류: $APP_NAME 파일을 찾을 수 없습니다."
-                      echo "이 스크립트를 RustDesk.app과 같은 폴더에서 실행해주세요."
-                      exit 1
-                  fi
-                  echo "Quarantine 속성 제거 중..."
-                  xattr -cr "$APP_NAME"
-                  echo ""
-                  echo "설치 완료!"
-                  echo "이제 RustDesk.app을 더블클릭하여 실행할 수 있습니다."
-                  echo ""
-                  echo "기본 설정:"
-                  echo "  - 영구 비밀번호: Qmarket1"
-                  echo "  - 커스텀 서버: 223.130.153.199"
-                  INSTALL_EOF
-
-                                    chmod +x release_output/install.sh
-
-                                    # Create README
-                                    cat > release_output/README.txt << 'README_EOF'
-                  RustDesk - Qmarket Build
-                  ========================
-
-                  설치 방법:
-                  ----------
-                  1. RustDesk.app과 install.sh 파일을 같은 폴더에 둡니다
-                  2. 터미널을 열고 해당 폴더로 이동합니다
-                  3. 다음 명령을 실행합니다:
-
-                    ./install.sh
-
-                  4. RustDesk.app을 더블클릭하여 실행합니다
-
-                  또는 수동 설치:
-                  --------------
-                  터미널에서 다음 명령을 실행합니다:
-
-                  xattr -cr RustDesk.app
-
-                  그 다음 RustDesk.app을 더블클릭합니다.
-
-                  기본 설정:
-                  ----------
-                  - 영구 비밀번호: Qmarket1
-                  - 커스텀 서버: 223.130.153.199
-                  - 서버 키: 자동 설정됨
-
-                  주의사항:
-                  ---------
-                  이 빌드는 개발/내부 용도로 제작되었습니다.
-                  Apple 개발자 인증서로 서명되지 않았습니다.
-                  README_EOF
-
                   echo ""
                   echo "=== Release output contents ==="
                   ls -lah release_output/
@@ -406,14 +334,14 @@ jobs:
                   fi
 
                   # Create build info
-                  cat > release_output/build-info.txt << 'BUILD_EOF'
+                  cat > release_output/build-info.txt << EOF
                   Build Date: $(date)
                   Commit: ${{ github.sha }}
                   Branch: ${{ github.ref_name }}
                   Architecture: ${{ steps.arch.outputs.arch }}
                   Runner OS: ${{ runner.os }}
                   Flutter Build: Yes
-                  BUILD_EOF
+                  EOF
 
             - name: Upload artifacts
               if: success()
