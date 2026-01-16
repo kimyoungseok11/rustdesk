@@ -284,136 +284,64 @@ jobs:
                     ls -lRh flutter/build/macos/
                   fi
 
-            - name: Create DMG installer
+            - name: Create release directory
               if: success()
               run: |
-                  mkdir -p dmg_content release_output
+                  mkdir -p release_output
 
+                  # Flutter build creates .app in flutter/build/macos/Build/Products/Release/
                   FLUTTER_APP_PATH="flutter/build/macos/Build/Products/Release/RustDesk.app"
 
-                  if [ ! -d "$FLUTTER_APP_PATH" ]; then
-                    echo "Error: Flutter .app bundle not found"
-                    exit 1
+                  # Copy Flutter .app bundle if exists
+                  if [ -d "$FLUTTER_APP_PATH" ]; then
+                    echo "Found Flutter .app bundle at: $FLUTTER_APP_PATH"
+                    cp -r "$FLUTTER_APP_PATH" release_output/
+
+                    # Get app bundle size
+                    echo "App bundle size:"
+                    du -sh "$FLUTTER_APP_PATH"
+                  else
+                    echo "Warning: Flutter .app bundle not found at $FLUTTER_APP_PATH"
                   fi
 
-                  echo "Copying RustDesk.app to DMG content..."
-                  cp -r "$FLUTTER_APP_PATH" dmg_content/
+                  # Also check cargo bundle location (legacy builds)
+                  if [ -d "target/release/bundle/osx" ]; then
+                    echo "Found legacy cargo bundle..."
+                    cp -r target/release/bundle/osx/* release_output/ 2>/dev/null || true
+                  fi
 
-                  echo "Creating installer app..."
-                  mkdir -p "dmg_content/Install RustDesk.app/Contents/MacOS"
+                  # Copy DMG if exists
+                  if find . -name "*.dmg" -print -quit | grep -q .; then
+                    echo "Copying DMG files..."
+                    find . -name "*.dmg" -exec cp {} release_output/ \;
+                  fi
 
-                  cat > "dmg_content/Install RustDesk.app/Contents/MacOS/installer" <<'INSTALLER_EOF'
-#!/bin/bash
-set -e
-echo "=== RustDesk Installer - Qmarket Build ==="
-echo ""
-if [ "$EUID" -ne 0 ]; then
-echo "This installer needs administrator privileges."
-echo "Please enter your password when prompted."
-echo ""
-osascript -e 'do shell script "\"'"$0"'\"" with administrator privileges'
-exit 0
-fi
-APP_NAME="RustDesk.app"
-SCRIPT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
-SOURCE_APP="$SCRIPT_DIR/$APP_NAME"
-DEST_APP="/Applications/$APP_NAME"
-echo "Installing RustDesk to Applications folder..."
-if [ -d "$DEST_APP" ]; then
-echo "Removing existing installation..."
-rm -rf "$DEST_APP"
-fi
-echo "Copying application..."
-cp -R "$SOURCE_APP" "$DEST_APP"
-echo "Removing quarantine attributes..."
-xattr -cr "$DEST_APP"
-echo ""
-echo "✓ Installation complete!"
-echo ""
-echo "RustDesk has been installed to /Applications/"
-echo "You can now open it from Launchpad or Applications folder."
-echo ""
-echo "Default settings:"
-echo "- Permanent password: Qmarket1"
-echo "- Custom server: 223.130.153.199"
-echo ""
-osascript <<-APPLESCRIPT
-display dialog "RustDesk installation completed successfully!\n\nThe app has been installed to /Applications/\n\nDefault password: Qmarket1\nServer: 223.130.153.199" buttons {"OK"} default button 1 with icon note with title "Installation Complete"
-APPLESCRIPT
-exit 0
-INSTALLER_EOF
-
-                  chmod +x "dmg_content/Install RustDesk.app/Contents/MacOS/installer"
-
-                  cat > "dmg_content/Install RustDesk.app/Contents/Info.plist" << 'PLIST_EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>installer</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.qmarket.rustdesk.installer</string>
-    <key>CFBundleName</key>
-    <string>Install RustDesk</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-</dict>
-</plist>
-PLIST_EOF
-
-                  cat > dmg_content/README.txt << 'README_EOF'
-RustDesk - Qmarket Build
-========================
-
-설치 방법:
-----------
-1. "Install RustDesk.app"을 우클릭 → "열기" 클릭
-2. 관리자 비밀번호 입력
-3. 설치 완료!
-
-이후 /Applications/RustDesk.app을 더블클릭하여 실행할 수 있습니다.
-
-기본 설정:
-----------
-- 영구 비밀번호: Qmarket1
-- 커스텀 서버: 223.130.153.199
-- 서버 키: 자동 설정됨
-
-주의사항:
----------
-이 빌드는 개발/내부 용도로 제작되었습니다.
-Apple 개발자 인증서로 서명되지 않았습니다.
-README_EOF
-
-                  ln -s /Applications dmg_content/Applications
+                  # Copy standalone binary if exists
+                  if [ -f "target/release/rustdesk" ]; then
+                    echo "Copying standalone binary..."
+                    cp target/release/rustdesk release_output/
+                  fi
 
                   echo ""
-                  echo "Creating DMG file..."
-                  DMG_NAME="RustDesk-Qmarket-${{ steps.arch.outputs.arch }}.dmg"
+                  echo "=== Release output contents ==="
+                  ls -lah release_output/
 
-                  hdiutil create -volname "RustDesk Installer" \
-                    -srcfolder dmg_content \
-                    -ov -format UDZO \
-                    "release_output/$DMG_NAME"
+                  # Show detailed contents if .app exists
+                  if [ -d "release_output/RustDesk.app" ]; then
+                    echo ""
+                    echo "=== RustDesk.app structure ==="
+                    ls -lah release_output/RustDesk.app/Contents/MacOS/
+                  fi
 
-                  echo ""
-                  echo "=== DMG created: $DMG_NAME ==="
-                  ls -lh "release_output/$DMG_NAME"
-
-                  cat > release_output/build-info.txt << 'BUILD_EOF'
-Build Date: $(date)
-Commit: ${{ github.sha }}
-Branch: ${{ github.ref_name }}
-Architecture: ${{ steps.arch.outputs.arch }}
-Runner OS: ${{ runner.os }}
-Flutter Build: Yes
-Package Type: DMG Installer
-BUILD_EOF
+                  # Create build info
+                  cat > release_output/build-info.txt << EOF
+                  Build Date: $(date)
+                  Commit: ${{ github.sha }}
+                  Branch: ${{ github.ref_name }}
+                  Architecture: ${{ steps.arch.outputs.arch }}
+                  Runner OS: ${{ runner.os }}
+                  Flutter Build: Yes
+                  EOF
 
             - name: Upload artifacts
               if: success()
