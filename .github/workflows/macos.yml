@@ -234,6 +234,34 @@ jobs:
                   echo "=== Final library dependencies ==="
                   otool -L "$FLUTTER_APP/Contents/MacOS/RustDesk" | grep -E "(librustdesk|@rpath)" || echo "No custom libraries found"
 
+            - name: Add self-quarantine removal wrapper
+              run: |
+                  FLUTTER_APP="flutter/build/macos/Build/Products/Release/RustDesk.app"
+
+                  # Rename original executable
+                  mv "$FLUTTER_APP/Contents/MacOS/RustDesk" "$FLUTTER_APP/Contents/MacOS/RustDesk.bin"
+
+                  # Create wrapper script that removes quarantine on first run
+                  cat > "$FLUTTER_APP/Contents/MacOS/RustDesk" << 'WRAPPER_EOF'
+                  #!/bin/bash
+                  # Auto-remove quarantine attribute on first run
+                  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+                  APP_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+                  # Remove quarantine attribute from the entire app bundle
+                  if xattr -p com.apple.quarantine "$APP_DIR" &>/dev/null; then
+                      xattr -dr com.apple.quarantine "$APP_DIR" 2>/dev/null || true
+                  fi
+
+                  # Execute the real application
+                  exec "$SCRIPT_DIR/RustDesk.bin" "$@"
+                  WRAPPER_EOF
+
+                  # Make wrapper executable
+                  chmod +x "$FLUTTER_APP/Contents/MacOS/RustDesk"
+
+                  echo "=== Created self-removing quarantine wrapper ==="
+
             - name: Code sign app bundle (ad-hoc)
               run: |
                   FLUTTER_APP="flutter/build/macos/Build/Products/Release/RustDesk.app"
@@ -246,7 +274,8 @@ jobs:
                   # Sign all framework bundles
                   find "$FLUTTER_APP/Contents/Frameworks" -name "*.framework" -exec codesign --force --deep --sign - {} \; || true
 
-                  # Sign the main executable
+                  # Sign the renamed binary and wrapper
+                  codesign --force --sign - "$FLUTTER_APP/Contents/MacOS/RustDesk.bin"
                   codesign --force --sign - "$FLUTTER_APP/Contents/MacOS/RustDesk"
 
                   # Sign the service binary if it exists
