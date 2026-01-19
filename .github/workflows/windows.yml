@@ -47,7 +47,8 @@ jobs:
               run: |
                   $env:VCPKG_ROOT = "C:\vcpkg"
                   cd ${{ github.workspace }}
-                  C:\vcpkg\vcpkg.exe install --clean-after-build
+                  # Install only essential packages without aom/ffmpeg (avoid hwcodec dependencies)
+                  C:\vcpkg\vcpkg.exe install libvpx:x64-windows libyuv:x64-windows opus:x64-windows --clean-after-build
 
             - name: Detect architecture and set paths
               id: arch
