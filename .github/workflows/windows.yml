@@ -164,7 +164,7 @@ jobs:
 
             - name: Build RustDesk
               run: |
-                  python build.py --flutter --hwcodec
+                  python build.py --flutter
               env:
                   VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
                   OPUS_STATIC: ${{ env.OPUS_STATIC }}
